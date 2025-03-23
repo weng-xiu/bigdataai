@@ -269,6 +269,37 @@
               <template #header>
                 <div class="card-header">
                   <span>CPU使用率</span>
+                  <el-select v-model="cpuTimeRange" size="small" style="width: 120px">
+                    <el-option label="最近1小时" value="1h" />
+                    <el-option label="最近6小时" value="6h" />
+                    <el-option label="最近24小时" value="24h" />
+                  </el-select>
+                </div>
+              </template>
+              <div class="chart-container" ref="nodeCpuChart"></div>
+            </el-card>
+          </el-col>
+
+          <!-- 内存使用率 -->
+          <el-col :xs="24" :lg="8">
+            <el-card class="chart-card">
+              <template #header>
+                <div class="card-header">
+                  <span>内存使用率</span>
+                  <el-select v-model="memoryTimeRange" size="small" style="width: 120px">
+                    <el-option label="最近1小时" value="1h" />
+                    <el-option label="最近6小时" value="6h" />
+                    <el-option label="最近24小时" value="24h" />
+                  </el-select>
+                </div>
+              </template>
+              <div class="chart-container" ref="nodeMemoryChart"></div>
+            </el-card>
+          </el-col>
+            <el-card class="chart-card">
+              <template #header>
+                <div class="card-header">
+                  <span>CPU使用率</span>
                   <el-select v-model="monitorTimeRange" size="small" style="width: 120px">
                     <el-option label="最近1小时" value="1h" />
                     <el-option label="最近6小时" value="6h" />
