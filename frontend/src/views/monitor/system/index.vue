@@ -336,54 +336,156 @@ const initDiskChart = () => {
   
   diskChartInstance = echarts.init(diskChart.value)
   
-  let option = {}
-  
-  if (diskViewType.value === 'usage') {
-    // 磁盘使用率饼图
-    option = {
-      tooltip: {
-        trigger: 'item',
-        formatter: '{a} <br/>{b}: {c} GB ({d}%)'
-      },
-      legend: {
-        orient: 'vertical',
-        left: 10,
-        data: ['系统', '数据', '日志', '备份', '可用空间']
-      },
-      series: [
-        {
-          name: '磁盘空间',
-          type: 'pie',
-          radius: ['50%', '70%'],
-          avoidLabelOverlap: false,
-          itemStyle: {
-            borderRadius: 10,
-            borderColor: '#fff',
-            borderWidth: 2
-          },
-          label: {
-            show: false,
-            position: 'center'
-          },
-          emphasis: {
-            label: {
-              show: true,
-              fontSize: '18',
-              fontWeight: 'bold'
-            }
-          },
-          labelLine: {
-            show: false
-          },
-          data: [
-            { value: 120, name: '系统', itemStyle: { color: '#409EFF' } },
-            { value: 350, name: '数据', itemStyle: { color: '#67C23A' } },
-            { value: 180, name: '日志', itemStyle: { color: '#E6A23C' } },
-            { value: 250, name: '备份', itemStyle: { color: '#F56C6C' } },
-            { value: 600, name: '可用空间', itemStyle: { color: '#909399' } }
-          ]
+  const option = {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'cross',
+        label: {
+          backgroundColor: '#6a7985'
         }
-      ]
-    }
-  } else {
-    // 磁盘IO折线图
+      }
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: generateTimeData('1h')
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      max: 100,
+      axisLabel: {
+        formatter: '{value}%'
+      }
+    },
+    series: [
+      {
+        name: '磁盘使用率',
+        type: 'line',
+        smooth: true,
+        lineStyle: {
+          width: 3,
+          color: '#E6A23C'
+        },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            {
+              offset: 0,
+              color: 'rgba(230, 162, 60, 0.5)'
+            },
+            {
+              offset: 1,
+              color: 'rgba(230, 162, 60, 0.1)'
+            }
+          ])
+        },
+        data: generateRandomData('1h', 20, 70)
+      }
+    ]
+  }
+  
+  diskChartInstance.setOption(option)
+}
+
+// 初始化网络流量图表
+const initNetworkChart = () => {
+  if (!networkChart.value) return
+  
+  networkChartInstance = echarts.init(networkChart.value)
+  
+  const option = {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'cross',
+        label: {
+          backgroundColor: '#6a7985'
+        }
+      }
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: generateTimeData('1h')
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: {
+        formatter: networkViewType.value === 'traffic' ? '{value} MB/s' : '{value} pkt/s'
+      }
+    },
+    series: networkViewType.value === 'traffic' ? [
+      {
+        name: '上传流量',
+        type: 'line',
+        smooth: true,
+        lineStyle: {
+          width: 3,
+          color: '#F56C6C'
+        },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(245, 108, 108, 0.5)' },
+            { offset: 1, color: 'rgba(245, 108, 108, 0.1)' }
+          ])
+        },
+        data: generateRandomData('1h', 5, 50)
+      },
+      {
+        name: '下载流量',
+        type: 'line',
+        smooth: true,
+        lineStyle: {
+          width: 3,
+          color: '#409EFF'
+        },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(64, 158, 255, 0.5)' },
+            { offset: 1, color: 'rgba(64, 158, 255, 0.1)' }
+          ])
+        },
+        data: generateRandomData('1h', 10, 80)
+      }
+    ] : [
+      {
+        name: '数据包',
+        type: 'line',
+        smooth: true,
+        lineStyle: {
+          width: 3,
+          color: '#67C23A'
+        },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(103, 194, 58, 0.5)' },
+            { offset: 1, color: 'rgba(103, 194, 58, 0.1)' }
+          ])
+        },
+        data: generateRandomData('1h', 100, 1000)
+      }
+    ]
+  }
+  
+  networkChartInstance.setOption(option)
+}
+
+watch(() => cpuTimeRange.value, () => {
+  initCpuChart()
+  initMemoryChart()
+  initDiskChart()
+  initNetworkChart()
+})
