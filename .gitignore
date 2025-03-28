@@ -1,0 +1,29 @@
+# Maven
+target/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Environment
+.env
+*.log
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Build output
+build/
+out/
+
+# Dependency directories
+node_modules/
+bower_components/
+
+# Local development files
+*.swp
+*.swo
+*.swn
