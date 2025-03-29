@@ -85,103 +85,6 @@ public class MonitoringServiceImpl implements MonitoringService {
     }
     
     /**
-     * 检查指标是否触发告警
-     * @param metricName 指标名称
-     * @param value 指标值
-     */
-    private void checkAlerts(String metricName, Object value) {
-        try {
-            // 检查是否有该指标的告警规则
-            AlertRule rule = alertRules.get(metricName);
-            if (rule == null) {
-                return;
-            }
-            
-            boolean isTriggered = false;
-            double threshold = rule.getThreshold();
-            String operator = rule.getOperator();
-            
-            // 根据不同类型的指标值进行比较
-            if (value instanceof Double) {
-                double doubleValue = (Double) value;
-                isTriggered = compareValue(doubleValue, threshold, operator);
-            } else if (value instanceof Long) {
-                long longValue = (Long) value;
-                isTriggered = compareValue((double) longValue, threshold, operator);
-            } else if (value instanceof Integer) {
-                int intValue = (Integer) value;
-                isTriggered = compareValue((double) intValue, threshold, operator);
-            }
-            
-            // 如果触发告警，则记录告警信息
-            if (isTriggered) {
-                Map<String, Object> alert = new HashMap<>();
-                alert.put("metricName", metricName);
-                alert.put("value", value);
-                alert.put("threshold", threshold);
-                alert.put("operator", operator);
-                alert.put("level", rule.getAlertLevel());
-                alert.put("timestamp", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
-                
-                // 保存告警信息到Redis
-                String alertKey = "alert:" + metricName + ":" + System.currentTimeMillis();
-                redisTemplate.opsForValue().set(alertKey, alert);
-            }
-        } catch (Exception e) {
-            // 记录异常但不影响主流程
-            System.err.println("检查告警失败: " + e.getMessage());
-        }
-    }
-    
-    /**
-     * 比较值与阈值
-     * @param value 实际值
-     * @param threshold 阈值
-     * @param operator 比较运算符
-     * @return 是否触发告警
-     */
-    private boolean compareValue(double value, double threshold, String operator) {
-        switch (operator) {
-            case ">": return value > threshold;
-            case ">=": return value >= threshold;
-            case "<": return value < threshold;
-            case "<=": return value <= threshold;
-            case "==": return value == threshold;
-            case "!=": return value != threshold;
-            default: return false;
-        }
-    }
-    
-    /**
-     * 记录指标数据
-     * @param metricName 指标名称
-     * @param value 指标值
-     */
-    private void recordMetricData(String metricName, Object value) {
-        try {
-            // 获取该指标的历史数据列表，如果不存在则创建新列表
-            List<MetricData> history = metricHistory.computeIfAbsent(metricName, k -> new ArrayList<>());
-            
-            // 创建新的指标数据记录
-            MetricData data = new MetricData();
-            data.setTimestamp(new Date());
-            data.setValue(value);
-            
-            // 添加到历史数据列表
-            history.add(data);
-            
-            // 限制历史数据数量，只保留最近的1000条记录
-            if (history.size() > 1000) {
-                history = history.subList(history.size() - 1000, history.size());
-                metricHistory.put(metricName, history);
-            }
-        } catch (Exception e) {
-            // 记录异常但不影响主流程
-            System.err.println("记录指标数据失败: " + e.getMessage());
-        }
-    }
-    
-    /**
      * 告警规则内部类
      */
     private static class AlertRule {
@@ -370,54 +273,7 @@ public class MonitoringServiceImpl implements MonitoringService {
         return result;
     }
     
-    /**
-     * 检查指标是否触发告警
-     * @param metricName 指标名称
-     * @param value 指标值
-     */
-    private void checkAlerts(String metricName, Object value) {
-        try {
-            // 检查是否有该指标的告警规则
-            AlertRule rule = alertRules.get(metricName);
-            if (rule == null) {
-                return;
-            }
-            
-            boolean isTriggered = false;
-            double threshold = rule.getThreshold();
-            String operator = rule.getOperator();
-            
-            // 根据不同类型的指标值进行比较
-            if (value instanceof Double) {
-                double doubleValue = (Double) value;
-                isTriggered = compareValue(doubleValue, threshold, operator);
-            } else if (value instanceof Long) {
-                long longValue = (Long) value;
-                isTriggered = compareValue((double) longValue, threshold, operator);
-            } else if (value instanceof Integer) {
-                int intValue = (Integer) value;
-                isTriggered = compareValue((double) intValue, threshold, operator);
-            }
-            
-            // 如果触发告警，则记录告警信息
-            if (isTriggered) {
-                Map<String, Object> alert = new HashMap<>();
-                alert.put("metricName", metricName);
-                alert.put("value", value);
-                alert.put("threshold", threshold);
-                alert.put("operator", operator);
-                alert.put("level", rule.getAlertLevel());
-                alert.put("timestamp", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
-                
-                // 保存告警信息到Redis
-                String alertKey = "alert:" + metricName + ":" + System.currentTimeMillis();
-                redisTemplate.opsForValue().set(alertKey, alert);
-            }
-        } catch (Exception e) {
-            // 记录异常但不影响主流程
-            System.err.println("检查告警失败: " + e.getMessage());
-        }
-    }
+
     
     /**
      * 比较值与阈值
@@ -426,32 +282,14 @@ public class MonitoringServiceImpl implements MonitoringService {
      * @param operator 比较运算符
      * @return 是否触发告警
      */
-    private boolean compareValue(double value, double threshold, String operator) {
-        switch (operator) {
-            case ">": return value > threshold;
-            case ">=": return value >= threshold;
-            case "<": return value < threshold;
-            case "<=": return value <= threshold;
-            case "==": return value == threshold;
-            case "!=": return value != threshold;
-            default: return false;
-        }
-    }
+
     
     /**
      * 记录指标数据
      * @param metricName 指标名称
      * @param value 指标值
      */
-    private void recordMetricData(String metricName, Object value) {
-        try {
-            // 获取该指标的历史数据列表，如果不存在则创建新列表
-            List<MetricData> history = metricHistory.computeIfAbsent(metricName, k -> new ArrayList<>());
-            
-            // 创建新的指标数据记录
-            MetricData data = new MetricData();
-            data.setTimestamp(new Date());
-            data.setValue(value);
+
             
             // 添加到历史数据列表
             history.add(data);
@@ -561,54 +399,7 @@ public class MonitoringServiceImpl implements MonitoringService {
         return result;
     }
     
-    /**
-     * 检查指标是否触发告警
-     * @param metricName 指标名称
-     * @param value 指标值
-     */
-    private void checkAlerts(String metricName, Object value) {
-        try {
-            // 检查是否有该指标的告警规则
-            AlertRule rule = alertRules.get(metricName);
-            if (rule == null) {
-                return;
-            }
-            
-            boolean isTriggered = false;
-            double threshold = rule.getThreshold();
-            String operator = rule.getOperator();
-            
-            // 根据不同类型的指标值进行比较
-            if (value instanceof Double) {
-                double doubleValue = (Double) value;
-                isTriggered = compareValue(doubleValue, threshold, operator);
-            } else if (value instanceof Long) {
-                long longValue = (Long) value;
-                isTriggered = compareValue((double) longValue, threshold, operator);
-            } else if (value instanceof Integer) {
-                int intValue = (Integer) value;
-                isTriggered = compareValue((double) intValue, threshold, operator);
-            }
-            
-            // 如果触发告警，则记录告警信息
-            if (isTriggered) {
-                Map<String, Object> alert = new HashMap<>();
-                alert.put("metricName", metricName);
-                alert.put("value", value);
-                alert.put("threshold", threshold);
-                alert.put("operator", operator);
-                alert.put("level", rule.getAlertLevel());
-                alert.put("timestamp", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
-                
-                // 保存告警信息到Redis
-                String alertKey = "alert:" + metricName + ":" + System.currentTimeMillis();
-                redisTemplate.opsForValue().set(alertKey, alert);
-            }
-        } catch (Exception e) {
-            // 记录异常但不影响主流程
-            System.err.println("检查告警失败: " + e.getMessage());
-        }
-    }
+
     
     /**
      * 比较值与阈值
@@ -617,32 +408,14 @@ public class MonitoringServiceImpl implements MonitoringService {
      * @param operator 比较运算符
      * @return 是否触发告警
      */
-    private boolean compareValue(double value, double threshold, String operator) {
-        switch (operator) {
-            case ">": return value > threshold;
-            case ">=": return value >= threshold;
-            case "<": return value < threshold;
-            case "<=": return value <= threshold;
-            case "==": return value == threshold;
-            case "!=": return value != threshold;
-            default: return false;
-        }
-    }
+
     
     /**
      * 记录指标数据
      * @param metricName 指标名称
      * @param value 指标值
      */
-    private void recordMetricData(String metricName, Object value) {
-        try {
-            // 获取该指标的历史数据列表，如果不存在则创建新列表
-            List<MetricData> history = metricHistory.computeIfAbsent(metricName, k -> new ArrayList<>());
-            
-            // 创建新的指标数据记录
-            MetricData data = new MetricData();
-            data.setTimestamp(new Date());
-            data.setValue(value);
+
             
             // 添加到历史数据列表
             history.add(data);
