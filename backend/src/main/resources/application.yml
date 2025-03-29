@@ -2,6 +2,8 @@ server:
   port: 8080
 
 spring:
+  application:
+    name: bigdata-ai-service
   datasource:
     url: jdbc:mysql://localhost:3306/bigdata_db?useSSL=false&serverTimezone=UTC
     username: root
@@ -16,16 +18,41 @@ spring:
     port: 6379
     password: 
     database: 0
+  cloud:
+    discovery:
+      enabled: true
 
+# Eureka服务注册配置
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
+
+# JWT配置
+jwt:
+  secret: bigdataai_jwt_secret_key_2023
+  expiration: 18000 # 5小时，单位秒
+
+# HBase配置
 hbase:
   zookeeper:
     quorum: localhost
     port: 2181
 
+# Elasticsearch配置
 elasticsearch:
   host: localhost
   port: 9200
 
+# Spark配置
 spark:
   master: local[*]
   app-name: BigDataProcessing
+  executor:
+    memory: 2g
+  driver:
+    memory: 1g
