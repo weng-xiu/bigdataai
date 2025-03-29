@@ -186,4 +186,126 @@ public class ElasticsearchServiceImpl implements ElasticsearchService {
             }
             
             Map<String, Object> document = response.getSourceAsMap();
-            document.put("i
+            document.put("id", response.getId());
+            return document;
+        } catch (IOException e) {
+            throw new RuntimeException("获取Elasticsearch文档失败: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    public boolean deleteDocument(String indexName, String id) {
+        try {
+            DeleteRequest request = new DeleteRequest(indexName, id);
+            DeleteResponse response = elasticsearchClient.delete(request, RequestOptions.DEFAULT);
+            
+            return response.getResult() == DocWriteResponse.Result.DELETED;
+        } catch (IOException e) {
+            throw new RuntimeException("删除Elasticsearch文档失败: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    public boolean bulkDeleteDocuments(String indexName, List<String> ids) {
+        try {
+            BulkRequest request = new BulkRequest();
+            
+            for (String id : ids) {
+                DeleteRequest deleteRequest = new DeleteRequest(indexName, id);
+                request.add(deleteRequest);
+            }
+            
+            BulkResponse response = elasticsearchClient.bulk(request, RequestOptions.DEFAULT);
+            return !response.hasFailures();
+        } catch (IOException e) {
+            throw new RuntimeException("批量删除Elasticsearch文档失败: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    public List<Map<String, Object>> searchDocuments(String indexName, QueryBuilder queryBuilder, int from, int size) {
+        try {
+            SearchRequest request = new SearchRequest(indexName);
+            SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+            
+            if (queryBuilder != null) {
+                sourceBuilder.query(queryBuilder);
+            } else {
+                sourceBuilder.query(QueryBuilders.matchAllQuery());
+            }
+            
+            sourceBuilder.from(from);
+            sourceBuilder.size(size);
+            
+            request.source(sourceBuilder);
+            SearchResponse response = elasticsearchClient.search(request, RequestOptions.DEFAULT);
+            
+            List<Map<String, Object>> results = new ArrayList<>();
+            for (SearchHit hit : response.getHits().getHits()) {
+                Map<String, Object> document = hit.getSourceAsMap();
+                document.put("id", hit.getId());
+                document.put("score", hit.getScore());
+                results.add(document);
+            }
+            
+            return results;
+        } catch (IOException e) {
+            throw new RuntimeException("搜索Elasticsearch文档失败: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    public long countDocuments(String indexName, QueryBuilder queryBuilder) {
+        try {
+            SearchRequest request = new SearchRequest(indexName);
+            SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+            
+            if (queryBuilder != null) {
+                sourceBuilder.query(queryBuilder);
+            } else {
+                sourceBuilder.query(QueryBuilders.matchAllQuery());
+            }
+            
+            sourceBuilder.size(0); // 只获取计数，不获取文档内容
+            
+            request.source(sourceBuilder);
+            SearchResponse response = elasticsearchClient.search(request, RequestOptions.DEFAULT);
+            
+            return response.getHits().getTotalHits().value;
+        } catch (IOException e) {
+            throw new RuntimeException("计数Elasticsearch文档失败: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    public Map<String, Object> getIndexStats(String indexName) {
+        try {
+            IndicesStatsRequest request = new IndicesStatsRequest();
+            request.indices(indexName);
+            
+            IndicesStatsResponse response = elasticsearchClient.indices().stats(request, RequestOptions.DEFAULT);
+            
+            Map<String, Object> stats = new HashMap<>();
+            stats.put("documentCount", response.getTotal().getDocs().getCount());
+            stats.put("documentDeleted", response.getTotal().getDocs().getDeleted());
+            stats.put("storeSize", response.getTotal().getStore().getSizeInBytes());
+            stats.put("indexCount", response.getIndices().size());
+            stats.put("totalShards", response.getTotal().getShards().getTotal());
+            
+            return stats;
+        } catch (IOException e) {
+            throw new RuntimeException("获取Elasticsearch索引统计信息失败: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    public boolean refreshIndex(String indexName) {
+        try {
+            RefreshRequest request = new RefreshRequest(indexName);
+            elasticsearchClient.indices().refresh(request, RequestOptions.DEFAULT);
+            return true;
+        } catch (IOException e) {
+            throw new RuntimeException("刷新Elasticsearch索引失败: " + e.getMessage(), e);
+        }
+    }
+}
