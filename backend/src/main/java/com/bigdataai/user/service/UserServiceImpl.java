@@ -71,4 +71,32 @@ public class UserServiceImpl implements UserService {
 
         // 检查用户名和邮箱是否已被其他用户使用
         User userByUsername = userRepository.findByUsername(user.getUsername());
-        if (
+        if (userByUsername != null && !userByUsername.getId().equals(user.getId())) {
+            throw new IllegalArgumentException("用户名已被使用");
+        }
+        
+        User userByEmail = userRepository.findByEmail(user.getEmail());
+        if (userByEmail != null && !userByEmail.getId().equals(user.getId())) {
+            throw new IllegalArgumentException("邮箱已被使用");
+        }
+        
+        // 更新用户信息
+        existingUser.setUsername(user.getUsername());
+        existingUser.setEmail(user.getEmail());
+        existingUser.setFullName(user.getFullName());
+        existingUser.setPhone(user.getPhone());
+        
+        // 如果提供了新密码，则更新密码
+        if (StringUtils.hasText(user.getPassword())) {
+            existingUser.setPassword(passwordEncoder.encode(user.getPassword()));
+        }
+        
+        // 更新角色
+        if (user.getRoles() != null && !user.getRoles().isEmpty()) {
+            existingUser.setRoles(user.getRoles());
+        }
+        
+        // 保存更新后的用户
+        return userRepository.save(existingUser);
+    }
+}

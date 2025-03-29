@@ -69,3 +69,7 @@ public class CustomUserDetailsService implements UserDetailsService {
         for (String permission : permissions) {
             authorities.add(new SimpleGrantedAuthority(permission));
         }
+        
+        return authorities;
+    }
+}

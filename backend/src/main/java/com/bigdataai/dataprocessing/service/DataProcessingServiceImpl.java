@@ -288,4 +288,11 @@ public class DataProcessingServiceImpl implements DataProcessingService {
                     break;
                 default:
                     result.put("success", false);
-                    result.put("message", "不支持的算法: " + algorithm)
+                    result.put("message", "不支持的算法: " + algorithm);
+            }
+            return result;
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "执行机器学习算法失败: " + e.getMessage());
+            return result;
+        }

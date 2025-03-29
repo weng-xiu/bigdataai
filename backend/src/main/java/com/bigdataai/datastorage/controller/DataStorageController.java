@@ -228,4 +228,28 @@ public class DataStorageController {
     /**
      * Elasticsearch索引文档
      */
-    @PostMapping("/elasticsearch
+    @PostMapping("/elasticsearch/index")
+    public ResponseEntity<?> indexElasticsearchDocument(@RequestBody Map<String, Object> requestBody) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            String indexName = (String) requestBody.get("indexName");
+            Map<String, Object> document = (Map<String, Object>) requestBody.get("document");
+            String id = (String) requestBody.get("id");
+            
+            boolean success = dataStorageService.indexElasticsearchDocument(indexName, document, id);
+            
+            if (success) {
+                result.put("success", true);
+                result.put("message", "文档索引成功");
+                return ResponseEntity.ok(result);
+            } else {
+                result.put("success", false);
+                result.put("message", "文档索引失败");
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
+            }
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "文档索引失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
+        }
+    }

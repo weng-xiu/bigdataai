@@ -97,3 +97,4 @@ public class PermissionServiceImpl implements PermissionService {
         
         permissionRepository.deleteById(id);
     }
+}

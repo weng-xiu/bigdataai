@@ -111,4 +111,16 @@ public class RoleController {
      */
     @PostMapping("/{id}/permissions")
     public ResponseEntity<?> assignPermissions(
-            @
+            @PathVariable Long id,
+            @RequestBody List<Long> permissionIds) {
+        try {
+            roleService.assignPermissions(id, permissionIds);
+            Map<String, String> response = new HashMap<>();
+            response.put("message", "权限分配成功");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, String> response = new HashMap<>();
+            response.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }

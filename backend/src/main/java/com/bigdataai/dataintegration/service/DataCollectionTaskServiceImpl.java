@@ -275,3 +275,4 @@ public class DataCollectionTaskServiceImpl implements DataCollectionTaskService 
         }
         return status;
     }
+}
