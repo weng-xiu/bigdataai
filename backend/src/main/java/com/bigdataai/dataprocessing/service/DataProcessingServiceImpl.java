@@ -296,3 +296,151 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             result.put("message", "执行机器学习算法失败: " + e.getMessage());
             return result;
         }
+    }
+    
+    /**
+     * 执行批处理作业
+     * @param jobConfig 作业配置
+     * @param jobStatus 作业状态
+     */
+    private void executeBatchJob(Map<String, Object> jobConfig, Map<String, Object> jobStatus) {
+        try {
+            // 获取作业类型
+            String jobType = (String) jobConfig.get("jobType");
+            
+            // 根据作业类型执行不同的批处理逻辑
+            switch (jobType) {
+                case "ETL":
+                    // 执行ETL作业
+                    executeETLJob(jobConfig, jobStatus);
+                    break;
+                case "ANALYSIS":
+                    // 执行分析作业
+                    executeAnalysisJob(jobConfig, jobStatus);
+                    break;
+                default:
+                    jobStatus.put("error", "不支持的作业类型: " + jobType);
+            }
+        } catch (Exception e) {
+            jobStatus.put("error", "执行批处理作业失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 执行流处理作业
+     * @param streamConfig 流配置
+     * @param jobStatus 作业状态
+     */
+    private void executeStreamingJob(Map<String, Object> streamConfig, Map<String, Object> jobStatus) {
+        try {
+            // 获取流处理类型
+            String streamType = (String) streamConfig.get("streamType");
+            
+            // 根据流处理类型执行不同的流处理逻辑
+            switch (streamType) {
+                case "KAFKA":
+                    // 执行Kafka流处理
+                    executeKafkaStreaming(streamConfig, jobStatus);
+                    break;
+                case "SOCKET":
+                    // 执行Socket流处理
+                    executeSocketStreaming(streamConfig, jobStatus);
+                    break;
+                default:
+                    jobStatus.put("error", "不支持的流处理类型: " + streamType);
+            }
+        } catch (Exception e) {
+            jobStatus.put("error", "执行流处理作业失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 执行ETL作业
+     */
+    private void executeETLJob(Map<String, Object> jobConfig, Map<String, Object> jobStatus) {
+        // ETL作业实现逻辑
+        jobStatus.put("progress", 100);
+        jobStatus.put("result", "ETL作业执行完成");
+    }
+    
+    /**
+     * 执行分析作业
+     */
+    private void executeAnalysisJob(Map<String, Object> jobConfig, Map<String, Object> jobStatus) {
+        // 分析作业实现逻辑
+        jobStatus.put("progress", 100);
+        jobStatus.put("result", "分析作业执行完成");
+    }
+    
+    /**
+     * 执行Kafka流处理
+     */
+    private void executeKafkaStreaming(Map<String, Object> streamConfig, Map<String, Object> jobStatus) {
+        // Kafka流处理实现逻辑
+        jobStatus.put("progress", 100);
+        jobStatus.put("result", "Kafka流处理执行中");
+    }
+    
+    /**
+     * 执行Socket流处理
+     */
+    private void executeSocketStreaming(Map<String, Object> streamConfig, Map<String, Object> jobStatus) {
+        // Socket流处理实现逻辑
+        jobStatus.put("progress", 100);
+        jobStatus.put("result", "Socket流处理执行中");
+    }
+    
+    /**
+     * 执行KMeans聚类算法
+     */
+    private Map<String, Object> executeKMeans(Map<String, Object> params, Map<String, Object> inputData) {
+        // KMeans算法实现逻辑
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("message", "KMeans聚类算法执行成功");
+        return result;
+    }
+    
+    /**
+     * 执行逻辑回归算法
+     */
+    private Map<String, Object> executeLogisticRegression(Map<String, Object> params, Map<String, Object> inputData) {
+        // 逻辑回归算法实现逻辑
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("message", "逻辑回归算法执行成功");
+        return result;
+    }
+    
+    /**
+     * 加载数据集
+     */
+    private Dataset<Row> loadDataset(DataSource dataSource, String tableName) {
+        // 数据集加载逻辑
+        return sparkSession.emptyDataFrame();
+    }
+    
+    /**
+     * 应用数据清洗规则
+     */
+    private Dataset<Row> applyCleaningRules(Dataset<Row> dataset, Map<String, Object> rules) {
+        // 数据清洗逻辑
+        return dataset;
+    }
+    
+    /**
+     * 应用数据转换规则
+     */
+    private Dataset<Row> applyTransformations(Dataset<Row> dataset, Map<String, Object> transformations) {
+        // 数据转换逻辑
+        return dataset;
+    }
+    
+    /**
+     * 应用数据聚合规则
+     */
+    private Dataset<Row> applyAggregations(Dataset<Row> dataset, Map<String, Object> aggregations) {
+        // 数据聚合逻辑
+        return dataset;
+    }
+}

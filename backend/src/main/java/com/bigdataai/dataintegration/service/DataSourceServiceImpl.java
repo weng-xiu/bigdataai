@@ -205,12 +205,15 @@ public class DataSourceServiceImpl implements DataSourceService {
     /**
      * 测试MySQL连接
      */
-    private void testMySQLConnection(DataSource dataSource) throws SQLException {
-        String url = dataSource.getJdbcUrl();
+    private void testMySQLConnection(DataSource dataSource, Map<String, Object> result) throws Exception {
+        String url = dataSource.getConnectionUrl();
         String username = dataSource.getUsername();
         String password = dataSource.getPassword();
         
-        try (Connection connection = DriverManager.getConnection(url, username, password)) {
+        try (java.sql.Connection connection = DriverManager.getConnection(url, username, password)) {
             // 连接成功，不需要做任何事情
+            result.put("success", true);
+            result.put("message", "连接成功");
         }
     }
+}

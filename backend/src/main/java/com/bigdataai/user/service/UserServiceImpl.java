@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.Date;
 import java.util.HashSet;
@@ -64,16 +65,100 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
+    public Optional<User> login(String username, String password) {
+        Optional<User> userOptional = userRepository.findByUsername(username);
+        if (!userOptional.isPresent()) {
+            return Optional.empty();
+        }
+        
+        User user = userOptional.get();
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            return Optional.empty();
+        }
+        
+        return userOptional;
+    }
+
+    @Override
+    @Transactional
+    public Optional<User> findById(Long id) {
+        return userRepository.findById(id);
+    }
+
+    @Override
+    @Transactional
+    public Optional<User> findByUsername(String username) {
+        return userRepository.findByUsername(username);
+    }
+
+    @Override
+    @Transactional
+    public List<User> findAllUsers() {
+        return userRepository.findAll();
+    }
+
+    @Override
+    @Transactional
+    public void deleteUser(Long id) {
+        userRepository.deleteById(id);
+    }
+
+    @Override
+    @Transactional
+    public boolean changePassword(Long id, String oldPassword, String newPassword) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+                
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            return false;
+        }
+        
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public User assignRoles(Long userId, List<Long> roleIds) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+                
+        Set<Role> roles = new HashSet<>();
+        for (Long roleId : roleIds) {
+            Role role = roleRepository.findById(roleId)
+                    .orElseThrow(() -> new IllegalArgumentException("角色不存在: " + roleId));
+            roles.add(role);
+        }
+        
+        user.setRoles(roles);
+        return userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public boolean hasPermission(Long userId, String permission) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+                
+        return user.getRoles().stream()
+                .flatMap(role -> role.getPermissions().stream())
+                .anyMatch(p -> p.getPermission().equals(permission));
+    }
+
+    @Override
+    @Transactional
     public User updateUser(User user) {
         // 检查用户是否存在
         User existingUser = userRepository.findById(user.getId())
                 .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
 
         // 检查用户名和邮箱是否已被其他用户使用
-        User userByUsername = userRepository.findByUsername(user.getUsername());
-        if (userByUsername != null && !userByUsername.getId().equals(user.getId())) {
-            throw new IllegalArgumentException("用户名已被使用");
-        }
+        userRepository.findByUsername(user.getUsername()).ifPresent(userByUsername -> {
+            if (!userByUsername.getId().equals(user.getId())) {
+                throw new IllegalArgumentException("用户名已被使用");
+            }
+        });
         
         User userByEmail = userRepository.findByEmail(user.getEmail());
         if (userByEmail != null && !userByEmail.getId().equals(user.getId())) {
