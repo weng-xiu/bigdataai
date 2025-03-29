@@ -18,6 +18,19 @@ spring:
     port: 6379
     password: 
     database: 0
+  data:
+    mongodb:
+      host: localhost
+      port: 27017
+      database: bigdata_mongodb
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: bigdata-group
+      auto-offset-reset: earliest
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
   cloud:
     discovery:
       enabled: true
