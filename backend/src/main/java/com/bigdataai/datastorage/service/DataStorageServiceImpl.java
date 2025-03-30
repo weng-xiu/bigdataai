@@ -197,6 +197,29 @@ public class DataStorageServiceImpl implements DataStorageService {
     }
 
     @Override
+    public Map<String, Object> getHdfsStatus() {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            FileSystem fs = getFileSystem();
+            
+            // 获取HDFS状态信息
+            long capacity = fs.getStatus().getCapacity();
+            long used = fs.getStatus().getUsed();
+            long remaining = fs.getStatus().getRemaining();
+            
+            result.put("capacity", capacity);
+            result.put("capacityUsed", used);
+            result.put("capacityRemaining", remaining);
+            result.put("success", true);
+        } catch (IOException e) {
+            result.put("success", false);
+            result.put("message", "获取HDFS状态失败: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return result;
+    }
+
+    @Override
     public boolean deleteHDFSPath(String path, boolean recursive) {
         try {
             FileSystem fs = getFileSystem();

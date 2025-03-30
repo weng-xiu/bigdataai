@@ -16,6 +16,12 @@ public interface MonitoringService {
     Map<String, Object> getSystemResourceUsage();
 
     /**
+     * 获取数据处理任务状态
+     * @return 包含数据处理任务状态信息的列表
+     */
+    List<Map<String, Object>> getDataProcessingTaskStatus();
+
+    /**
      * 添加告警规则
      * @param metricName 指标名称
      * @param threshold 阈值
@@ -30,4 +36,10 @@ public interface MonitoringService {
      * @return 该指标的历史数据列表
      */
     List<MetricData> getMetricHistory(String metricName);
+
+    /**
+     * 获取数据存储状态
+     * @return 包含数据存储状态信息的Map
+     */
+    Map<String, Object> getDataStorageStatus();
 }

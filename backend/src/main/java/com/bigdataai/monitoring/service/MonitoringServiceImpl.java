@@ -2,6 +2,8 @@ package com.bigdataai.monitoring.service;
 
 import com.bigdataai.dataprocessing.service.DataProcessingService;
 import com.bigdataai.datastorage.service.DataStorageService;
+import com.bigdataai.monitoring.model.AlertRule;
+import com.bigdataai.monitoring.model.MetricData;
 import com.bigdataai.dataintegration.service.DataCollectionTaskService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -83,79 +85,6 @@ public class MonitoringServiceImpl implements MonitoringService {
 
         return result;
     }
-    
-    /**
-     * 告警规则内部类
-     */
-    private static class AlertRule {
-        private String metricName;    // 指标名称
-        private double threshold;     // 阈值
-        private String operator;      // 比较运算符（>, <, >=, <=, ==, !=）
-        private String alertLevel;    // 告警级别（INFO, WARNING, ERROR, CRITICAL）
-        
-        public AlertRule(String metricName, double threshold, String operator, String alertLevel) {
-            this.metricName = metricName;
-            this.threshold = threshold;
-            this.operator = operator;
-            this.alertLevel = alertLevel;
-        }
-        
-        public String getMetricName() {
-            return metricName;
-        }
-        
-        public void setMetricName(String metricName) {
-            this.metricName = metricName;
-        }
-        
-        public double getThreshold() {
-            return threshold;
-        }
-        
-        public void setThreshold(double threshold) {
-            this.threshold = threshold;
-        }
-        
-        public String getOperator() {
-            return operator;
-        }
-        
-        public void setOperator(String operator) {
-            this.operator = operator;
-        }
-        
-        public String getAlertLevel() {
-            return alertLevel;
-        }
-        
-        public void setAlertLevel(String alertLevel) {
-            this.alertLevel = alertLevel;
-        }
-    }
-    
-    /**
-     * 指标数据内部类
-     */
-    private static class MetricData {
-        private Date timestamp;    // 时间戳
-        private Object value;      // 指标值
-        
-        public Date getTimestamp() {
-            return timestamp;
-        }
-        
-        public void setTimestamp(Date timestamp) {
-            this.timestamp = timestamp;
-        }
-        
-        public Object getValue() {
-            return value;
-        }
-        
-        public void setValue(Object value) {
-            this.value = value;
-        }
-    }
 
     @Override
     public List<Map<String, Object>> getDataProcessingTaskStatus() {
@@ -191,20 +120,42 @@ public class MonitoringServiceImpl implements MonitoringService {
         try {
             // 获取HDFS存储信息
             Map<String, Object> hdfsStatus = dataStorageService.getHdfsStatus();
-            result.put("hdfs", hdfsStatus);
+            if (hdfsStatus != null) {
+                result.put("hdfs", hdfsStatus);
+                // 检查HDFS存储状态是否触发告警
+                checkAlerts("hdfsCapacityUsed", hdfsStatus.get("capacityUsed"));
+                checkAlerts("hdfsCapacityRemaining", hdfsStatus.get("capacityRemaining"));
+            }
 
             // 获取HBase存储信息
             Map<String, Object> hbaseStatus = dataStorageService.getHbaseStatus();
-            result.put("hbase", hbaseStatus);
+            if (hbaseStatus != null) {
+                result.put("hbase", hbaseStatus);
+                // 检查HBase存储状态是否触发告警
+                checkAlerts("hbaseRegionCount", hbaseStatus.get("regionCount"));
+                checkAlerts("hbaseStoreFileSize", hbaseStatus.get("storeFileSize"));
+            }
 
             // 获取Elasticsearch存储信息
             Map<String, Object> esStatus = dataStorageService.getElasticsearchStatus();
-            result.put("elasticsearch", esStatus);
+            if (esStatus != null) {
+                result.put("elasticsearch", esStatus);
+                // 检查Elasticsearch存储状态是否触发告警
+                checkAlerts("esIndexCount", esStatus.get("indexCount"));
+                checkAlerts("esStoreSize", esStatus.get("storeSize"));
+            }
+
+            // 记录历史数据
+            recordMetricData("hdfsStatus", hdfsStatus);
+            recordMetricData("hbaseStatus", hbaseStatus);
+            recordMetricData("esStatus", esStatus);
 
             result.put("success", true);
         } catch (Exception e) {
             result.put("success", false);
             result.put("message", "获取数据存储状态失败: " + e.getMessage());
+            // 记录异常日志
+            System.err.println("获取数据存储状态失败: " + e.getMessage());
         }
 
         return result;
@@ -273,8 +224,6 @@ public class MonitoringServiceImpl implements MonitoringService {
         return result;
     }
     
-
-    
     /**
      * 比较值与阈值
      * @param value 实际值
@@ -282,14 +231,73 @@ public class MonitoringServiceImpl implements MonitoringService {
      * @param operator 比较运算符
      * @return 是否触发告警
      */
-
+    private boolean compareValue(Object value, double threshold, String operator) {
+        if (value instanceof Number) {
+            double numValue = ((Number) value).doubleValue();
+            switch (operator) {
+                case ">":
+                    return numValue > threshold;
+                case "<":
+                    return numValue < threshold;
+                case ">=":
+                    return numValue >= threshold;
+                case "<=":
+                    return numValue <= threshold;
+                case "==":
+                    return numValue == threshold;
+                case "!=":
+                    return numValue != threshold;
+                default:
+                    return false;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * 检查告警
+     * @param metricName 指标名称
+     * @param value 指标值
+     */
+    private void checkAlerts(String metricName, Object value) {
+        try {
+            AlertRule rule = alertRules.get(metricName);
+            if (rule != null) {
+                boolean triggered = compareValue(value, rule.getThreshold(), rule.getOperator());
+                if (triggered) {
+                    // 创建告警信息
+                    Map<String, Object> alert = new HashMap<>();
+                    alert.put("metricName", metricName);
+                    alert.put("value", value);
+                    alert.put("threshold", rule.getThreshold());
+                    alert.put("operator", rule.getOperator());
+                    alert.put("alertLevel", rule.getAlertLevel());
+                    alert.put("timestamp", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+                    
+                    // 保存到Redis
+                    String alertId = UUID.randomUUID().toString();
+                    redisTemplate.opsForValue().set("alert:" + alertId, alert);
+                }
+            }
+        } catch (Exception e) {
+            // 记录异常但不影响主流程
+            System.err.println("检查告警失败: " + e.getMessage());
+        }
+    }
     
     /**
      * 记录指标数据
      * @param metricName 指标名称
      * @param value 指标值
      */
-
+    private void recordMetricData(String metricName, Object value) {
+        try {
+            List<MetricData> history = metricHistory.getOrDefault(metricName, new ArrayList<>());
+            
+            // 创建新的指标数据
+            MetricData data = new MetricData();
+            data.setTimestamp(new Date());
+            data.setValue(value);
             
             // 添加到历史数据列表
             history.add(data);
@@ -302,79 +310,6 @@ public class MonitoringServiceImpl implements MonitoringService {
         } catch (Exception e) {
             // 记录异常但不影响主流程
             System.err.println("记录指标数据失败: " + e.getMessage());
-        }
-    }
-    
-    /**
-     * 告警规则内部类
-     */
-    private static class AlertRule {
-        private String metricName;    // 指标名称
-        private double threshold;     // 阈值
-        private String operator;      // 比较运算符（>, <, >=, <=, ==, !=）
-        private String alertLevel;    // 告警级别（INFO, WARNING, ERROR, CRITICAL）
-        
-        public AlertRule(String metricName, double threshold, String operator, String alertLevel) {
-            this.metricName = metricName;
-            this.threshold = threshold;
-            this.operator = operator;
-            this.alertLevel = alertLevel;
-        }
-        
-        public String getMetricName() {
-            return metricName;
-        }
-        
-        public void setMetricName(String metricName) {
-            this.metricName = metricName;
-        }
-        
-        public double getThreshold() {
-            return threshold;
-        }
-        
-        public void setThreshold(double threshold) {
-            this.threshold = threshold;
-        }
-        
-        public String getOperator() {
-            return operator;
-        }
-        
-        public void setOperator(String operator) {
-            this.operator = operator;
-        }
-        
-        public String getAlertLevel() {
-            return alertLevel;
-        }
-        
-        public void setAlertLevel(String alertLevel) {
-            this.alertLevel = alertLevel;
-        }
-    }
-    
-    /**
-     * 指标数据内部类
-     */
-    private static class MetricData {
-        private Date timestamp;    // 时间戳
-        private Object value;      // 指标值
-        
-        public Date getTimestamp() {
-            return timestamp;
-        }
-        
-        public void setTimestamp(Date timestamp) {
-            this.timestamp = timestamp;
-        }
-        
-        public Object getValue() {
-            return value;
-        }
-        
-        public void setValue(Object value) {
-            this.value = value;
         }
     }
 
@@ -397,111 +332,6 @@ public class MonitoringServiceImpl implements MonitoringService {
         }
 
         return result;
-    }
-    
-
-    
-    /**
-     * 比较值与阈值
-     * @param value 实际值
-     * @param threshold 阈值
-     * @param operator 比较运算符
-     * @return 是否触发告警
-     */
-
-    
-    /**
-     * 记录指标数据
-     * @param metricName 指标名称
-     * @param value 指标值
-     */
-
-            
-            // 添加到历史数据列表
-            history.add(data);
-            
-            // 限制历史数据数量，只保留最近的1000条记录
-            if (history.size() > 1000) {
-                history = history.subList(history.size() - 1000, history.size());
-                metricHistory.put(metricName, history);
-            }
-        } catch (Exception e) {
-            // 记录异常但不影响主流程
-            System.err.println("记录指标数据失败: " + e.getMessage());
-        }
-    }
-    
-    /**
-     * 告警规则内部类
-     */
-    private static class AlertRule {
-        private String metricName;    // 指标名称
-        private double threshold;     // 阈值
-        private String operator;      // 比较运算符（>, <, >=, <=, ==, !=）
-        private String alertLevel;    // 告警级别（INFO, WARNING, ERROR, CRITICAL）
-        
-        public AlertRule(String metricName, double threshold, String operator, String alertLevel) {
-            this.metricName = metricName;
-            this.threshold = threshold;
-            this.operator = operator;
-            this.alertLevel = alertLevel;
-        }
-        
-        public String getMetricName() {
-            return metricName;
-        }
-        
-        public void setMetricName(String metricName) {
-            this.metricName = metricName;
-        }
-        
-        public double getThreshold() {
-            return threshold;
-        }
-        
-        public void setThreshold(double threshold) {
-            this.threshold = threshold;
-        }
-        
-        public String getOperator() {
-            return operator;
-        }
-        
-        public void setOperator(String operator) {
-            this.operator = operator;
-        }
-        
-        public String getAlertLevel() {
-            return alertLevel;
-        }
-        
-        public void setAlertLevel(String alertLevel) {
-            this.alertLevel = alertLevel;
-        }
-    }
-    
-    /**
-     * 指标数据内部类
-     */
-    private static class MetricData {
-        private Date timestamp;    // 时间戳
-        private Object value;      // 指标值
-        
-        public Date getTimestamp() {
-            return timestamp;
-        }
-        
-        public void setTimestamp(Date timestamp) {
-            this.timestamp = timestamp;
-        }
-        
-        public Object getValue() {
-            return value;
-        }
-        
-        public void setValue(Object value) {
-            this.value = value;
-        }
     }
 
     @Override
