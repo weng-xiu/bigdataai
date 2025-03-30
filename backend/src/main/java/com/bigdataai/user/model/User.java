@@ -28,7 +28,7 @@ public class User {
     
     private String phone;
     
-    private String realName;
+    private String fullName;
     
     private Date createTime;
     
@@ -42,4 +42,20 @@ public class User {
      */
     @TableField(exist = false)
     private Set<Role> roles = new HashSet<>();
+    
+    /**
+     * 添加角色到用户
+     * @param role 角色
+     */
+    public void addRole(Role role) {
+        this.roles.add(role);
+    }
+    
+    /**
+     * 判断用户是否启用
+     * @return 是否启用
+     */
+    public boolean isEnabled() {
+        return this.enabled != null && this.enabled;
+    }
 }

@@ -40,27 +40,7 @@ public class UserController {
         }
     }
 
-    /**
-     * 用户登录
-     * @param loginRequest 登录请求
-     * @return 登录结果
-     */
-    @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Map<String, String> loginRequest) {
-        String username = loginRequest.get("username");
-        String password = loginRequest.get("password");
-
-        Optional<User> userOpt = userService.login(username, password);
-
-        if (userOpt.isPresent()) {
-            // 登录成功，返回用户信息（实际项目中应该返回JWT token）
-            return ResponseEntity.ok(userOpt.get());
-        } else {
-            Map<String, String> response = new HashMap<>();
-            response.put("message", "用户名或密码错误");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
-        }
-    }
+    // 登录功能已移至AuthController
 
     /**
      * 获取所有用户

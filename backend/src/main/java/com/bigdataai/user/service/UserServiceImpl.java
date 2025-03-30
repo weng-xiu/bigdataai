@@ -40,6 +40,12 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public User registerUser(User user) {
+        return registerUser(user, "ROLE_USER");
+    }
+    
+    @Override
+    @Transactional
+    public User registerUser(User user, String roleName) {
         // 检查用户名和邮箱是否已存在
         if (userRepository.existsByUsername(user.getUsername())) {
             throw new IllegalArgumentException("用户名已存在");
@@ -51,11 +57,16 @@ public class UserServiceImpl implements UserService {
         // 加密密码
         user.setPassword(passwordEncoder.encode(user.getPassword()));
 
-        // 设置默认角色
-        Role userRole = roleRepository.findByName("ROLE_USER");
-        if (userRole != null) {
-            user.addRole(userRole);
+        // 设置指定角色
+        Role role = roleRepository.findByName(roleName);
+        if (role == null) {
+            // 如果指定角色不存在，则使用默认角色
+            role = roleRepository.findByName("ROLE_USER");
+            if (role == null) {
+                throw new IllegalArgumentException("系统错误：默认角色不存在");
+            }
         }
+        user.addRole(role);
 
         // 设置创建时间
         user.setCreateTime(new Date());
@@ -183,6 +194,5 @@ public class UserServiceImpl implements UserService {
         }
         
         // 保存更新后的用户
-        return userRepository.save(existingUser);
-    }
+        return userRepository.save
 }
