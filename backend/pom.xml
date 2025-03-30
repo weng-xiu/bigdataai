@@ -32,6 +32,7 @@
         <jjwt.version>0.9.1</jjwt.version>
         <mongodb.version>4.6.1</mongodb.version>
         <kafka.version>3.1.0</kafka.version>
+        <mybatis-plus.version>3.5.2</mybatis-plus.version>
     </properties>
 
     <dependencyManagement>
@@ -64,8 +65,9 @@
         
         <!-- 数据库相关依赖 -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa</artifactId>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-boot-starter</artifactId>
+            <version>${mybatis-plus.version}</version>
         </dependency>
         <dependency>
             <groupId>mysql</groupId>

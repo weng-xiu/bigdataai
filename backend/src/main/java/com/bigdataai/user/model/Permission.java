@@ -1,22 +1,20 @@
 package com.bigdataai.user.model;
 
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
-
-import javax.persistence.*;
 
 /**
  * 权限实体类
  */
 @Data
-@Entity
-@Table(name = "permissions")
+@TableName("permissions")
 public class Permission {
     
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(value = "id", type = IdType.AUTO)
     private Long id;
     
-    @Column(nullable = false, unique = true)
     private String name;
     
     private String description;

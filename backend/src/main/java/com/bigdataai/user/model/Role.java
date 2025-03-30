@@ -1,8 +1,11 @@
 package com.bigdataai.user.model;
 
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
-import javax.persistence.*;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -10,24 +13,20 @@ import java.util.Set;
  * 角色实体类
  */
 @Data
-@Entity
-@Table(name = "roles")
+@TableName("roles")
 public class Role {
     
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(value = "id", type = IdType.AUTO)
     private Long id;
     
-    @Column(nullable = false, unique = true)
     private String name;
     
     private String description;
     
-    @ManyToMany(fetch = FetchType.EAGER)
-    @JoinTable(
-        name = "role_permissions",
-        joinColumns = @JoinColumn(name = "role_id"),
-        inverseJoinColumns = @JoinColumn(name = "permission_id")
-    )
+    /**
+     * 角色权限关系需要通过中间表手动管理
+     * 使用@TableField(exist=false)标记非数据库字段
+     */
+    @TableField(exist = false)
     private Set<Permission> permissions = new HashSet<>();
 }

@@ -1,8 +1,11 @@
 package com.bigdataai.user.model;
 
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
-import javax.persistence.*;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
@@ -11,18 +14,14 @@ import java.util.Set;
  * 用户实体类
  */
 @Data
-@Entity
-@Table(name = "users")
+@TableName("users")
 public class User {
     
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(value = "id", type = IdType.AUTO)
     private Long id;
     
-    @Column(nullable = false, unique = true)
     private String username;
     
-    @Column(nullable = false)
     private String password;
     
     private String email;
@@ -31,19 +30,16 @@ public class User {
     
     private String realName;
     
-    @Temporal(TemporalType.TIMESTAMP)
     private Date createTime;
     
-    @Temporal(TemporalType.TIMESTAMP)
     private Date lastLoginTime;
     
     private Boolean enabled = true;
     
-    @ManyToMany(fetch = FetchType.EAGER)
-    @JoinTable(
-        name = "user_roles",
-        joinColumns = @JoinColumn(name = "user_id"),
-        inverseJoinColumns = @JoinColumn(name = "role_id")
-    )
+    /**
+     * 用户角色关系需要通过中间表手动管理
+     * 使用@TableField(exist=false)标记非数据库字段
+     */
+    @TableField(exist = false)
     private Set<Role> roles = new HashSet<>();
 }
