@@ -2,6 +2,8 @@ package com.bigdataai.security.controller;
 
 import com.bigdataai.security.CustomUserDetailsService;
 import com.bigdataai.security.JwtTokenUtil;
+import com.bigdataai.user.model.Permission;
+import com.bigdataai.user.model.Role;
 import com.bigdataai.user.model.User;
 import com.bigdataai.user.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,13 +16,16 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * 认证控制器
- * 处理用户登录和令牌刷新请求
+ * 处理用户注册、登录、令牌刷新和验证请求
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -37,6 +42,51 @@ public class AuthController {
     
     @Autowired
     private UserService userService;
+
+    /**
+     * 用户注册
+     * @param user 用户信息
+     * @param roleName 角色名称
+     * @return 注册结果
+     */
+    @PostMapping("/register")
+    public ResponseEntity<?> registerUser(@RequestBody User user, @RequestParam(defaultValue = "ROLE_USER") String roleName) {
+        try {
+            // 检查用户名是否已存在
+            if (userService.findByUsername(user.getUsername()).isPresent()) {
+                Map<String, String> response = new HashMap<>();
+                response.put("message", "用户名已存在");
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+            }
+            
+            // 注册用户
+            User registeredUser = userService.registerUser(user, roleName);
+            
+            // 生成令牌
+            final UserDetails userDetails = userDetailsService.loadUserByUsername(registeredUser.getUsername());
+            final String token = jwtTokenUtil.generateToken(userDetails);
+            final String refreshToken = jwtTokenUtil.generateRefreshToken(userDetails);
+            
+            // 构建响应
+            Map<String, Object> response = new HashMap<>();
+            response.put("token", token);
+            response.put("refreshToken", refreshToken);
+            response.put("message", "注册成功");
+            
+            Map<String, Object> userInfo = new HashMap<>();
+            userInfo.put("id", registeredUser.getId());
+            userInfo.put("username", registeredUser.getUsername());
+            userInfo.put("email", registeredUser.getEmail());
+            userInfo.put("roles", registeredUser.getRoles());
+            response.put("user", userInfo);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, String> response = new HashMap<>();
+            response.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
 
     /**
      * 用户登录
@@ -65,7 +115,25 @@ public class AuthController {
                 userInfo.put("id", user.getId());
                 userInfo.put("username", user.getUsername());
                 userInfo.put("email", user.getEmail());
-                userInfo.put("roles", user.getRoles());
+                userInfo.put("fullName", user.getFullName());
+                userInfo.put("phone", user.getPhone());
+                userInfo.put("lastLoginTime", user.getLastLoginTime());
+                
+                // 添加角色信息
+                List<String> roleNames = user.getRoles().stream()
+                        .map(Role::getName)
+                        .collect(Collectors.toList());
+                userInfo.put("roles", roleNames);
+                
+                // 添加权限信息
+                List<String> permissions = new ArrayList<>();
+                for (Role role : user.getRoles()) {
+                    for (Permission permission : role.getPermissions()) {
+                        permissions.add(permission.getPermission());
+                    }
+                }
+                userInfo.put("permissions", permissions);
+                
                 response.put("user", userInfo);
             });
             
@@ -97,14 +165,65 @@ public class AuthController {
             
             final UserDetails userDetails = userDetailsService.loadUserByUsername(username);
             final String newToken = jwtTokenUtil.refreshToken(refreshToken);
+            // 生成新的刷新令牌，增强安全性
+            final String newRefreshToken = jwtTokenUtil.generateRefreshToken(userDetails);
             
-            Map<String, String> response = new HashMap<>();
+            Optional<User> userOpt = userService.findByUsername(username);
+            
+            Map<String, Object> response = new HashMap<>();
             response.put("token", newToken);
+            response.put("refreshToken", newRefreshToken);
+            
+            userOpt.ifPresent(user -> {
+                Map<String, Object> userInfo = new HashMap<>();
+                userInfo.put("id", user.getId());
+                userInfo.put("username", user.getUsername());
+                response.put("user", userInfo);
+            });
+            
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             Map<String, String> response = new HashMap<>();
             response.put("message", "刷新令牌无效");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        }
+    }
+    
+    /**
+     * 验证令牌
+     * @param tokenRequest 令牌请求
+     * @return 验证结果
+     */
+    @PostMapping("/validate-token")
+    public ResponseEntity<?> validateToken(@RequestBody Map<String, String> tokenRequest) {
+        String token = tokenRequest.get("token");
+        
+        try {
+            String username = jwtTokenUtil.getUsernameFromToken(token);
+            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+            
+            boolean isValid = jwtTokenUtil.validateToken(token, userDetails);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("valid", isValid);
+            
+            if (isValid) {
+                response.put("username", username);
+                Optional<User> userOpt = userService.findByUsername(username);
+                userOpt.ifPresent(user -> {
+                    List<String> roles = user.getRoles().stream()
+                            .map(Role::getName)
+                            .collect(Collectors.toList());
+                    response.put("roles", roles);
+                });
+            }
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("valid", false);
+            response.put("message", "令牌无效或已过期");
+            return ResponseEntity.ok(response);
         }
     }
 
@@ -121,6 +240,21 @@ public class AuthController {
             throw new Exception("用户已禁用", e);
         } catch (BadCredentialsException e) {
             throw new Exception("用户名或密码错误", e);
+        } catch (Exception e) {
+            throw new Exception("认证失败: " + e.getMessage(), e);
         }
     }
+    
+    /**
+     * 处理认证异常
+     * @param e 异常
+     * @return 错误响应
+     */
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<?> handleAuthenticationException(Exception e) {
+        Map<String, String> response = new HashMap<>();
+        response.put("message", e.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+    }
+}
 }
