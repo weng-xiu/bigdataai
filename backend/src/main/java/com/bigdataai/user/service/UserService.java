@@ -1,6 +1,7 @@
 package com.bigdataai.user.service;
 
 import com.bigdataai.user.model.User;
+import com.bigdataai.user.model.UserLog;
 
 import java.util.List;
 import java.util.Optional;
@@ -22,9 +23,11 @@ public interface UserService {
      * 用户登录
      * @param username 用户名
      * @param password 密码
+     * @param ipAddress IP地址
+     * @param userAgent 用户代理
      * @return 登录用户信息
      */
-    Optional<User> login(String username, String password);
+    Optional<User> login(String username, String password, String ipAddress, String userAgent);
 
     /**
      * 根据ID查找用户
@@ -83,4 +86,19 @@ public interface UserService {
      * @return 是否有权限
      */
     boolean hasPermission(Long userId, String permission);
+    
+    /**
+     * 解锁用户账户
+     * @param userId 用户ID
+     * @return 是否成功解锁
+     */
+    boolean unlockUser(Long userId);
+    
+    /**
+     * 获取用户登录日志
+     * @param userId 用户ID
+     * @param limit 限制数量
+     * @return 日志列表
+     */
+    List<UserLog> getUserLoginLogs(Long userId, int limit);
 }

@@ -37,6 +37,21 @@ public class User {
     private Boolean enabled = true;
     
     /**
+     * 登录失败次数
+     */
+    private Integer loginFailCount = 0;
+    
+    /**
+     * 账户是否锁定
+     */
+    private Boolean locked = false;
+    
+    /**
+     * 账户锁定时间
+     */
+    private Date lockedTime;
+    
+    /**
      * 用户角色关系需要通过中间表手动管理
      * 使用@TableField(exist=false)标记非数据库字段
      */
@@ -56,6 +71,49 @@ public class User {
      * @return 是否启用
      */
     public boolean isEnabled() {
-        return this.enabled != null && this.enabled;
+        return this.enabled != null && this.enabled && !isLocked();
+    }
+    
+    /**
+     * 判断用户是否锁定
+     * @return 是否锁定
+     */
+    public boolean isLocked() {
+        return this.locked != null && this.locked;
+    }
+    
+    /**
+     * 增加登录失败次数
+     */
+    public void incrementLoginFailCount() {
+        if (this.loginFailCount == null) {
+            this.loginFailCount = 1;
+        } else {
+            this.loginFailCount++;
+        }
+    }
+    
+    /**
+     * 重置登录失败次数
+     */
+    public void resetLoginFailCount() {
+        this.loginFailCount = 0;
+    }
+    
+    /**
+     * 锁定账户
+     */
+    public void lock() {
+        this.locked = true;
+        this.lockedTime = new Date();
+    }
+    
+    /**
+     * 解锁账户
+     */
+    public void unlock() {
+        this.locked = false;
+        this.lockedTime = null;
+        resetLoginFailCount();
     }
 }
