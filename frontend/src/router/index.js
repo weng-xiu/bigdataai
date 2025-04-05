@@ -94,24 +94,58 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   // 获取token
   const token = localStorage.getItem('token')
+  const store = router.app._context.provides.store
   
-  // 如果访问登录页，直接放行
-  if (to.path === '/login') {
-    next()
+  // 白名单路径，不需要登录就可以访问
+  const whiteList = ['/login', '/register', '/forget-password']
+  
+  // 如果在白名单中，直接放行
+  if (whiteList.includes(to.path)) {
+    // 如果已登录且访问登录页，重定向到首页
+    if (token && to.path === '/login') {
+      next({ path: '/' })
+    } else {
+      next()
+    }
     return
   }
   
   // 如果没有token，重定向到登录页
   if (!token) {
-    next('/login')
+    next(`/login?redirect=${to.path}`)
     return
   }
   
-  // 有token，放行
-  next()
+  try {
+    // 验证token有效性
+    await store.dispatch('user/validateToken')
+    
+    // 如果没有用户信息，获取用户信息
+    if (!store.state.user.userInfo.id) {
+      await store.dispatch('user/getUserInfo')
+    }
+    
+    // 检查是否有权限访问该路由
+    if (to.meta && to.meta.roles) {
+      const hasPermission = store.state.user.roles.some(role => to.meta.roles.includes(role))
+      if (!hasPermission) {
+        next({ path: '/403' })
+        return
+      }
+    }
+    
+    // 有效token，放行
+    next()
+  } catch (error) {
+    console.error('路由守卫验证失败:', error)
+    // 清除用户信息
+    store.commit('user/CLEAR_USER')
+    // 重定向到登录页
+    next(`/login?redirect=${to.path}`)
+  }
 })
 
 export default router

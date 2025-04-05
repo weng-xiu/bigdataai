@@ -6,14 +6,15 @@
       </div>
       
       <el-form ref="loginFormRef" :model="loginForm" :rules="loginRules" class="login-form" autocomplete="on">
-        <!-- 用户名 -->
+        <!-- 用户名/邮箱 -->
         <el-form-item prop="username">
           <el-input
             v-model="loginForm.username"
-            placeholder="用户名"
+            placeholder="用户名或邮箱"
             type="text"
             autocomplete="on"
             prefix-icon="User"
+            @keyup.enter="handleLogin"
           />
         </el-form-item>
         
@@ -26,12 +27,14 @@
             autocomplete="on"
             prefix-icon="Lock"
             show-password
+            @keyup.enter="handleLogin"
           />
         </el-form-item>
         
         <!-- 记住密码 -->
         <div class="remember-container">
           <el-checkbox v-model="loginForm.remember">记住密码</el-checkbox>
+          <el-link type="primary" class="forget-password" href="#">忘记密码?</el-link>
         </div>
         
         <!-- 登录按钮 -->
@@ -42,11 +45,11 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { validUsername } from '@/utils/validate'
+import { validEmail } from '@/utils/validate'
 
 const store = useStore()
 const router = useRouter()
@@ -62,18 +65,36 @@ const passwordVisible = ref(false)
 
 // 登录表单数据
 const loginForm = reactive({
-  username: 'admin',
-  password: '123456',
-  remember: false
+  username: '',
+  password: '',
+  remember: localStorage.getItem('remember') === 'true'
+})
+
+// 如果记住了用户名，则自动填充
+onMounted(() => {
+  const rememberedUsername = localStorage.getItem('rememberedUsername')
+  if (rememberedUsername) {
+    loginForm.username = rememberedUsername
+    loginForm.remember = true
+  }
 })
 
 // 表单验证规则
 const loginRules = {
   username: [
-    { required: true, trigger: 'blur', message: '请输入用户名' },
+    { required: true, trigger: 'blur', message: '请输入用户名或邮箱' },
     { validator: (rule, value, callback) => {
-      if (!validUsername(value)) {
-        callback(new Error('请输入正确的用户名'))
+      // 支持用户名或邮箱登录
+      if (value.includes('@')) {
+        // 如果输入包含@，则验证邮箱格式
+        if (!validEmail(value)) {
+          callback(new Error('请输入正确的邮箱格式'))
+        } else {
+          callback()
+        }
+      } else if (value.length < 3) {
+        // 简单的用户名长度验证
+        callback(new Error('用户名长度不能少于3个字符'))
       } else {
         callback()
       }
@@ -90,13 +111,29 @@ const handleLogin = () => {
   loginFormRef.value.validate(valid => {
     if (valid) {
       loading.value = true
+      
+      // 保存记住登录状态
+      localStorage.setItem('remember', loginForm.remember)
+      
       store.dispatch('user/login', loginForm)
-        .then(() => {
+        .then((user) => {
           ElMessage.success('登录成功')
-          router.push({ path: '/' })
+          
+          // 根据用户角色决定跳转页面
+          const roles = user.roles || []
+          if (roles.includes('ROLE_ADMIN')) {
+            router.push({ path: '/dashboard' })
+          } else {
+            router.push({ path: '/' })
+          }
         })
         .catch(error => {
-          ElMessage.error(error.message || '登录失败，请重试')
+          // 显示具体的错误信息
+          if (error.response && error.response.data && error.response.data.message) {
+            ElMessage.error(error.response.data.message)
+          } else {
+            ElMessage.error(error.message || '登录失败，请重试')
+          }
         })
         .finally(() => {
           loading.value = false
@@ -147,6 +184,13 @@ const handleLogin = () => {
       .remember-container {
         margin-bottom: 20px;
         color: #606266;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        
+        .forget-password {
+          font-size: 14px;
+        }
       }
       
       .login-button {
