@@ -1,11 +1,13 @@
 package com.bigdataai.user.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.bigdataai.user.model.User;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -46,6 +48,46 @@ public interface UserMapper extends BaseMapper<User> {
      */
     @Select("SELECT COUNT(*) FROM users WHERE email = #{email}")
     int existsByEmail(@Param("email") String email);
+    
+    /**
+     * 根据用户名或邮箱查找用户
+     * @param usernameOrEmail 用户名或邮箱
+     * @return 用户信息
+     */
+    @Select("SELECT * FROM users WHERE username = #{usernameOrEmail} OR email = #{usernameOrEmail}")
+    User selectByUsernameOrEmail(@Param("usernameOrEmail") String usernameOrEmail);
+    
+    /**
+     * 查询用户列表（带分页）
+     * @param page 分页参数
+     * @param keyword 关键字（用户名、邮箱或全名）
+     * @return 分页用户列表
+     */
+    @Select("<script>"
+           + "SELECT * FROM users "
+           + "<where>"
+           + "<if test='keyword != null and keyword != ""'>"
+           + "username LIKE CONCAT('%', #{keyword}, '%') "
+           + "OR email LIKE CONCAT('%', #{keyword}, '%') "
+           + "OR full_name LIKE CONCAT('%', #{keyword}, '%')"
+           + "</if>"
+           + "</where>"
+           + "ORDER BY create_time DESC"
+           + "</script>")
+    IPage<User> selectUserPage(IPage<User> page, @Param("keyword") String keyword);
+    
+    /**
+     * 批量查询用户
+     * @param userIds 用户ID列表
+     * @return 用户列表
+     */
+    @Select("<script>"
+           + "SELECT * FROM users WHERE id IN "
+           + "<foreach collection='userIds' item='id' open='(' separator=',' close=')'>"
+           + "#{id}"
+           + "</foreach>"
+           + "</script>")
+    List<User> selectBatchUsersByIds(@Param("userIds") List<Long> userIds);
     
     /**
      * 更新用户最后登录时间

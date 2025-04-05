@@ -3,7 +3,8 @@ package com.bigdataai.security;
 import com.bigdataai.user.model.Permission;
 import com.bigdataai.user.model.Role;
 import com.bigdataai.user.model.User;
-import com.bigdataai.user.repository.UserRepository;
+import com.bigdataai.user.mapper.UserMapper;
+import com.bigdataai.user.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 自定义用户详情服务
@@ -25,13 +27,25 @@ import java.util.List;
 public class CustomUserDetailsService implements UserDetailsService {
 
     @Autowired
-    private UserRepository userRepository;
+    private UserMapper userMapper;
+    
+    @Autowired
+    private UserService userService;
 
     @Override
     @Transactional
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("用户名不存在: " + username));
+        // 使用MyBatis-Plus的UserMapper替代JPA的UserRepository
+        User user = userMapper.selectByUsername(username);
+        if (user == null) {
+            throw new UsernameNotFoundException("用户名不存在: " + username);
+        }
+        
+        // 加载用户角色
+        Optional<User> userWithRoles = userService.findByUsername(username);
+        if (userWithRoles.isPresent()) {
+            user = userWithRoles.get();
+        }
 
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
@@ -39,7 +53,7 @@ public class CustomUserDetailsService implements UserDetailsService {
                 user.isEnabled(),
                 true,
                 true,
-                true,
+                !user.isLocked(),  // 账户未锁定
                 getAuthorities(user.getRoles()));
     }
 

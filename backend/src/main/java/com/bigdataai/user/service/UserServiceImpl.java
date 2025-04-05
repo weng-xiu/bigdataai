@@ -63,11 +63,16 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public User registerUser(User user, String roleName) {
-        // 检查用户名和邮箱是否已存在
-        if (userMapper.existsByUsername(user.getUsername()) > 0) {
+        // 使用条件构造器检查用户名和邮箱是否已存在
+        LambdaQueryWrapper<User> usernameQuery = Wrappers.<User>lambdaQuery()
+                .eq(User::getUsername, user.getUsername());
+        if (userMapper.selectCount(usernameQuery) > 0) {
             throw new IllegalArgumentException("用户名已存在");
         }
-        if (userMapper.existsByEmail(user.getEmail()) > 0) {
+        
+        LambdaQueryWrapper<User> emailQuery = Wrappers.<User>lambdaQuery()
+                .eq(User::getEmail, user.getEmail());
+        if (userMapper.selectCount(emailQuery) > 0) {
             throw new IllegalArgumentException("邮箱已存在");
         }
 
@@ -106,10 +111,16 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public Optional<User> login(String username, String password, String ipAddress, String userAgent) {
-        User user = userMapper.selectByUsername(username);
+        // 使用条件构造器查询用户，支持用户名或邮箱登录
+        LambdaQueryWrapper<User> queryWrapper = Wrappers.<User>lambdaQuery()
+                .eq(User::getUsername, username)
+                .or()
+                .eq(User::getEmail, username);
+        User user = userMapper.selectOne(queryWrapper);
+        
         if (user == null) {
             // 记录登录失败日志
-            UserLog log = UserLog.createLoginFailureLog(username, ipAddress, userAgent, "用户名不存在");
+            UserLog log = UserLog.createLoginFailureLog(username, ipAddress, userAgent, "用户名或邮箱不存在");
             userLogMapper.insert(log);
             return Optional.empty();
         }
@@ -183,7 +194,40 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     public Optional<User> findByUsername(String username) {
-        User user = userMapper.selectByUsername(username);
+        // 使用条件构造器查询用户
+        LambdaQueryWrapper<User> queryWrapper = Wrappers.<User>lambdaQuery()
+                .eq(User::getUsername, username);
+        User user = userMapper.selectOne(queryWrapper);
+        if (user != null) {
+            loadUserRoles(user);
+            return Optional.of(user);
+        }
+        return Optional.empty();
+    }
+    
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<User> findByEmail(String email) {
+        // 使用条件构造器查询用户
+        LambdaQueryWrapper<User> queryWrapper = Wrappers.<User>lambdaQuery()
+                .eq(User::getEmail, email);
+        User user = userMapper.selectOne(queryWrapper);
+        if (user != null) {
+            loadUserRoles(user);
+            return Optional.of(user);
+        }
+        return Optional.empty();
+    }
+    
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<User> findByUsernameOrEmail(String usernameOrEmail) {
+        // 使用条件构造器查询用户
+        LambdaQueryWrapper<User> queryWrapper = Wrappers.<User>lambdaQuery()
+                .eq(User::getUsername, usernameOrEmail)
+                .or()
+                .eq(User::getEmail, usernameOrEmail);
+        User user = userMapper.selectOne(queryWrapper);
         if (user != null) {
             loadUserRoles(user);
             return Optional.of(user);
@@ -194,11 +238,46 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     public List<User> findAllUsers() {
-        List<User> users = userMapper.selectList(null);
+        // 使用条件构造器查询所有用户，并按创建时间降序排序
+        LambdaQueryWrapper<User> queryWrapper = Wrappers.<User>lambdaQuery()
+                .orderByDesc(User::getCreateTime);
+        List<User> users = userMapper.selectList(queryWrapper);
         for (User user : users) {
             loadUserRoles(user);
         }
         return users;
+    }
+    
+    @Override
+    @Transactional(readOnly = true)
+    public List<User> findUsersByKeyword(String keyword) {
+        // 使用条件构造器进行模糊查询
+        LambdaQueryWrapper<User> queryWrapper = Wrappers.<User>lambdaQuery()
+                .like(StringUtils.hasText(keyword), User::getUsername, keyword)
+                .or()
+                .like(StringUtils.hasText(keyword), User::getEmail, keyword)
+                .or()
+                .like(StringUtils.hasText(keyword), User::getFullName, keyword)
+                .orderByDesc(User::getCreateTime);
+        List<User> users = userMapper.selectList(queryWrapper);
+        for (User user : users) {
+            loadUserRoles(user);
+        }
+        return users;
+    }
+    
+    @Override
+    @Transactional(readOnly = true)
+    public IPage<User> findUsersByPage(int pageNum, int pageSize, String keyword) {
+        // 创建分页对象
+        IPage<User> page = new Page<>(pageNum, pageSize);
+        // 使用Mapper中的分页查询方法
+        IPage<User> userPage = userMapper.selectUserPage(page, keyword);
+        // 加载用户角色
+        for (User user : userPage.getRecords()) {
+            loadUserRoles(user);
+        }
+        return userPage;
     }
 
     @Override
@@ -208,6 +287,20 @@ public class UserServiceImpl implements UserService {
         userRoleMapper.deleteUserRoles(id);
         // 再删除用户
         userMapper.deleteById(id);
+    }
+    
+    @Override
+    @Transactional
+    public void batchDeleteUsers(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+        // 批量删除用户角色关联
+        for (Long id : ids) {
+            userRoleMapper.deleteUserRoles(id);
+        }
+        // 批量删除用户
+        userMapper.deleteBatchIds(ids);
     }
 
     @Override
@@ -277,14 +370,19 @@ public class UserServiceImpl implements UserService {
             throw new IllegalArgumentException("用户不存在");
         }
 
-        // 检查用户名和邮箱是否已被其他用户使用
-        User userByUsername = userMapper.selectByUsername(user.getUsername());
-        if (userByUsername != null && !userByUsername.getId().equals(user.getId())) {
+        // 使用条件构造器检查用户名是否已被其他用户使用
+        LambdaQueryWrapper<User> usernameQuery = Wrappers.<User>lambdaQuery()
+                .eq(User::getUsername, user.getUsername())
+                .ne(User::getId, user.getId());
+        if (userMapper.selectCount(usernameQuery) > 0) {
             throw new IllegalArgumentException("用户名已被使用");
         }
         
-        User userByEmail = userMapper.selectByEmail(user.getEmail());
-        if (userByEmail != null && !userByEmail.getId().equals(user.getId())) {
+        // 使用条件构造器检查邮箱是否已被其他用户使用
+        LambdaQueryWrapper<User> emailQuery = Wrappers.<User>lambdaQuery()
+                .eq(User::getEmail, user.getEmail())
+                .ne(User::getId, user.getId());
+        if (userMapper.selectCount(emailQuery) > 0) {
             throw new IllegalArgumentException("邮箱已被使用");
         }
         
@@ -348,7 +446,51 @@ public class UserServiceImpl implements UserService {
         List<Long> roleIds = userRoleMapper.selectRoleIdsByUserId(user.getId());
         if (!roleIds.isEmpty()) {
             List<Role> roles = roleMapper.selectBatchIds(roleIds);
+            // 加载角色的权限信息
+            for (Role role : roles) {
+                List<Permission> permissions = roleMapper.selectPermissionsByRoleId(role.getId());
+                role.setPermissions(new HashSet<>(permissions));
+            }
             user.setRoles(new HashSet<>(roles));
+        }
+    }
+    
+    /**
+     * 批量加载用户角色
+     * @param users 用户列表
+     */
+    private void batchLoadUserRoles(List<User> users) {
+        if (users == null || users.isEmpty()) {
+            return;
+        }
+        
+        // 提取所有用户ID
+        List<Long> userIds = users.stream()
+                .map(User::getId)
+                .collect(Collectors.toList());
+        
+        // 批量查询用户角色关系
+        Map<Long, List<Long>> userRoleMap = userRoleMapper.selectBatchUserRoles(userIds);
+        
+        // 提取所有角色ID
+        List<Long> allRoleIds = userRoleMap.values().stream()
+                .flatMap(List::stream)
+                .distinct()
+                .collect(Collectors.toList());
+        
+        // 批量查询角色信息
+        List<Role> allRoles = roleMapper.selectBatchIds(allRoleIds);
+        Map<Long, Role> roleMap = allRoles.stream()
+                .collect(Collectors.toMap(Role::getId, role -> role));
+        
+        // 为每个用户设置角色
+        for (User user : users) {
+            List<Long> roleIds = userRoleMap.getOrDefault(user.getId(), Collections.emptyList());
+            Set<Role> userRoles = roleIds.stream()
+                    .map(roleMap::get)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+            user.setRoles(userRoles);
         }
     }
 }
