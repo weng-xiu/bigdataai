@@ -1,5 +1,6 @@
 package com.bigdataai.user.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.bigdataai.user.model.User;
 import com.bigdataai.user.model.UserLog;
 
@@ -42,12 +43,42 @@ public interface UserService {
      * @return 用户信息
      */
     Optional<User> findByUsername(String username);
+    
+    /**
+     * 根据邮箱查找用户
+     * @param email 邮箱
+     * @return 用户信息
+     */
+    Optional<User> findByEmail(String email);
+    
+    /**
+     * 根据用户名或邮箱查找用户
+     * @param usernameOrEmail 用户名或邮箱
+     * @return 用户信息
+     */
+    Optional<User> findByUsernameOrEmail(String usernameOrEmail);
 
     /**
      * 查找所有用户
      * @return 用户列表
      */
     List<User> findAllUsers();
+    
+    /**
+     * 根据关键字查找用户
+     * @param keyword 关键字（用户名、邮箱或全名）
+     * @return 用户列表
+     */
+    List<User> findUsersByKeyword(String keyword);
+    
+    /**
+     * 分页查询用户
+     * @param pageNum 页码
+     * @param pageSize 每页大小
+     * @param keyword 关键字（用户名、邮箱或全名）
+     * @return 分页用户列表
+     */
+    IPage<User> findUsersByPage(int pageNum, int pageSize, String keyword);
 
     /**
      * 更新用户信息
@@ -61,6 +92,12 @@ public interface UserService {
      * @param id 用户ID
      */
     void deleteUser(Long id);
+    
+    /**
+     * 批量删除用户
+     * @param ids 用户ID列表
+     */
+    void batchDeleteUsers(List<Long> ids);
 
     /**
      * 修改密码

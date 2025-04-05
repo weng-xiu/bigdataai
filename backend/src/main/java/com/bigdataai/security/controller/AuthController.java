@@ -98,7 +98,7 @@ public class AuthController {
                                   @RequestHeader(value = "X-Forwarded-For", required = false) String forwardedIp,
                                   @RequestHeader(value = "User-Agent", required = false) String userAgent,
                                   @RequestHeader(value = "X-Real-IP", required = false) String realIp) {
-        String username = authRequest.get("username");
+        String usernameOrEmail = authRequest.get("username");
         String password = authRequest.get("password");
         
         // 获取客户端IP地址
@@ -108,19 +108,19 @@ public class AuthController {
         }
         
         try {
-            // 使用UserService的login方法，记录登录日志和处理账户锁定
-            Optional<User> userOpt = userService.login(username, password, ipAddress, userAgent);
+            // 使用UserService的login方法，支持用户名或邮箱登录，记录登录日志和处理账户锁定
+            Optional<User> userOpt = userService.login(usernameOrEmail, password, ipAddress, userAgent);
             
             if (!userOpt.isPresent()) {
                 Map<String, String> response = new HashMap<>();
-                response.put("message", "用户名或密码错误");
+                response.put("message", "用户名/邮箱或密码错误");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
             }
             
             User user = userOpt.get();
             
             // 生成JWT令牌
-            final UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+            final UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
             final String token = jwtTokenUtil.generateToken(userDetails);
             final String refreshToken = jwtTokenUtil.generateRefreshToken(userDetails);
             
@@ -128,29 +128,8 @@ public class AuthController {
             response.put("token", token);
             response.put("refreshToken", refreshToken);
             
-            Map<String, Object> userInfo = new HashMap<>();
-            userInfo.put("id", user.getId());
-            userInfo.put("username", user.getUsername());
-            userInfo.put("email", user.getEmail());
-            userInfo.put("fullName", user.getFullName());
-            userInfo.put("phone", user.getPhone());
-            userInfo.put("lastLoginTime", user.getLastLoginTime());
-            
-            // 添加角色信息
-            List<String> roleNames = user.getRoles().stream()
-                    .map(Role::getName)
-                    .collect(Collectors.toList());
-            userInfo.put("roles", roleNames);
-            
-            // 添加权限信息
-            List<String> permissions = new ArrayList<>();
-            for (Role role : user.getRoles()) {
-                for (Permission permission : role.getPermissions()) {
-                    permissions.add(permission.getPermission());
-                }
-            }
-            userInfo.put("permissions", permissions);
-            
+            // 构建用户信息响应
+            Map<String, Object> userInfo = buildUserInfoResponse(user);
             response.put("user", userInfo);
             
             return ResponseEntity.ok(response);
@@ -159,6 +138,40 @@ public class AuthController {
             response.put("message", e.getMessage());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
         }
+    }
+    
+    /**
+     * 构建用户信息响应
+     * @param user 用户对象
+     * @return 用户信息Map
+     */
+    private Map<String, Object> buildUserInfoResponse(User user) {
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put("id", user.getId());
+        userInfo.put("username", user.getUsername());
+        userInfo.put("email", user.getEmail());
+        userInfo.put("fullName", user.getFullName());
+        userInfo.put("phone", user.getPhone());
+        userInfo.put("lastLoginTime", user.getLastLoginTime());
+        userInfo.put("createTime", user.getCreateTime());
+        userInfo.put("enabled", user.isEnabled());
+        
+        // 添加角色信息
+        List<String> roleNames = user.getRoles().stream()
+                .map(Role::getName)
+                .collect(Collectors.toList());
+        userInfo.put("roles", roleNames);
+        
+        // 添加权限信息 - 使用Set去重
+        Set<String> permissionSet = new HashSet<>();
+        for (Role role : user.getRoles()) {
+            for (Permission permission : role.getPermissions()) {
+                permissionSet.add(permission.getPermission());
+            }
+        }
+        userInfo.put("permissions", new ArrayList<>(permissionSet));
+        
+        return userInfo;
     }
 
     /**
