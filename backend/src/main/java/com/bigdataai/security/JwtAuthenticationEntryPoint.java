@@ -1,5 +1,6 @@
 package com.bigdataai.security;
 
+import com.alibaba.fastjson.JSON;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
@@ -7,7 +8,10 @@ import org.springframework.stereotype.Component;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.io.Serializable;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * JWT认证入口点
@@ -21,7 +25,20 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint, Se
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response,
                          AuthenticationException authException) throws IOException {
-        // 发送未授权错误，状态码401
-        response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "未授权：认证令牌无效或已过期");
+        // 设置响应状态码为401
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json;charset=UTF-8");
+        
+        // 构建错误响应
+        Map<String, Object> errorDetails = new HashMap<>();
+        errorDetails.put("status", HttpServletResponse.SC_UNAUTHORIZED);
+        errorDetails.put("error", "Unauthorized");
+        errorDetails.put("message", "未授权：认证令牌无效或已过期");
+        errorDetails.put("path", request.getRequestURI());
+        
+        // 写入响应
+        PrintWriter writer = response.getWriter();
+        writer.write(JSON.toJSONString(errorDetails));
+        writer.flush();
     }
 }

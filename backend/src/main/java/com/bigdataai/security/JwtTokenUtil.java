@@ -86,6 +86,20 @@ public class JwtTokenUtil implements Serializable {
      */
     public String generateToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
+        // 添加用户权限信息到令牌中
+        claims.put("authorities", userDetails.getAuthorities());
+        return doGenerateToken(claims, userDetails.getUsername(), JWT_TOKEN_VALIDITY);
+    }
+    
+    /**
+     * 生成带有额外信息的令牌
+     * @param userDetails 用户详情
+     * @param additionalClaims 额外的声明信息
+     * @return 令牌
+     */
+    public String generateToken(UserDetails userDetails, Map<String, Object> additionalClaims) {
+        Map<String, Object> claims = new HashMap<>(additionalClaims);
+        claims.put("authorities", userDetails.getAuthorities());
         return doGenerateToken(claims, userDetails.getUsername(), JWT_TOKEN_VALIDITY);
     }
 

@@ -101,6 +101,14 @@ public class AuthController {
         String usernameOrEmail = authRequest.get("username");
         String password = authRequest.get("password");
         
+        // 参数验证
+        if (usernameOrEmail == null || usernameOrEmail.trim().isEmpty() || 
+            password == null || password.trim().isEmpty()) {
+            Map<String, String> response = new HashMap<>();
+            response.put("message", "用户名和密码不能为空");
+            return ResponseEntity.badRequest().body(response);
+        }
+        
         // 获取客户端IP地址
         String ipAddress = forwardedIp;
         if (ipAddress == null || ipAddress.isEmpty()) {
@@ -112,31 +120,77 @@ public class AuthController {
             Optional<User> userOpt = userService.login(usernameOrEmail, password, ipAddress, userAgent);
             
             if (!userOpt.isPresent()) {
-                Map<String, String> response = new HashMap<>();
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "error");
                 response.put("message", "用户名/邮箱或密码错误");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
             }
             
             User user = userOpt.get();
             
+            // 检查用户是否被锁定
+            if (user.isLocked()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "error");
+                response.put("message", "账户已被锁定，请稍后再试或联系管理员");
+                response.put("lockedTime", user.getLockedTime());
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+            }
+            
+            // 检查用户是否被禁用
+            if (!user.isEnabled()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "error");
+                response.put("message", "账户已被禁用，请联系管理员");
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+            }
+            
             // 生成JWT令牌
             final UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
-            final String token = jwtTokenUtil.generateToken(userDetails);
+            
+            // 准备额外的声明信息
+            Map<String, Object> additionalClaims = new HashMap<>();
+            additionalClaims.put("userId", user.getId());
+            additionalClaims.put("email", user.getEmail());
+            
+            // 添加角色信息
+            List<String> roles = user.getRoles().stream()
+                    .map(Role::getName)
+                    .collect(Collectors.toList());
+            additionalClaims.put("roles", roles);
+            
+            // 生成带有额外信息的令牌
+            final String token = jwtTokenUtil.generateToken(userDetails, additionalClaims);
             final String refreshToken = jwtTokenUtil.generateRefreshToken(userDetails);
             
             Map<String, Object> response = new HashMap<>();
+            response.put("status", "success");
+            response.put("message", "登录成功");
             response.put("token", token);
             response.put("refreshToken", refreshToken);
+            response.put("tokenType", "Bearer");
+            response.put("expiresIn", jwtTokenUtil.getExpirationDateFromToken(token).getTime() / 1000);
             
             // 构建用户信息响应
             Map<String, Object> userInfo = buildUserInfoResponse(user);
             response.put("user", userInfo);
             
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            Map<String, String> response = new HashMap<>();
-            response.put("message", e.getMessage());
+        } catch (DisabledException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("message", "账户已被禁用");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+        } catch (BadCredentialsException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("message", "用户名或密码错误");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("message", "登录失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
     
@@ -183,37 +237,84 @@ public class AuthController {
     public ResponseEntity<?> refreshToken(@RequestBody Map<String, String> refreshTokenRequest) {
         String refreshToken = refreshTokenRequest.get("refreshToken");
         
+        if (refreshToken == null || refreshToken.trim().isEmpty()) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("message", "刷新令牌不能为空");
+            return ResponseEntity.badRequest().body(response);
+        }
+        
         try {
             String username = jwtTokenUtil.getUsernameFromToken(refreshToken);
             
             if (!jwtTokenUtil.canTokenBeRefreshed(refreshToken)) {
-                Map<String, String> response = new HashMap<>();
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "error");
                 response.put("message", "刷新令牌已过期");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
             }
             
+            // 获取用户信息
+            Optional<User> userOpt = userService.findByUsername(username);
+            if (!userOpt.isPresent()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "error");
+                response.put("message", "用户不存在");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+            }
+            
+            User user = userOpt.get();
+            
+            // 检查用户状态
+            if (!user.isEnabled()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "error");
+                response.put("message", "账户已被禁用");
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+            }
+            
+            if (user.isLocked()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "error");
+                response.put("message", "账户已被锁定");
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+            }
+            
             final UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-            final String newToken = jwtTokenUtil.refreshToken(refreshToken);
+            
+            // 准备额外的声明信息
+            Map<String, Object> additionalClaims = new HashMap<>();
+            additionalClaims.put("userId", user.getId());
+            additionalClaims.put("email", user.getEmail());
+            
+            // 添加角色信息
+            List<String> roles = user.getRoles().stream()
+                    .map(Role::getName)
+                    .collect(Collectors.toList());
+            additionalClaims.put("roles", roles);
+            
+            // 生成新令牌
+            final String newToken = jwtTokenUtil.generateToken(userDetails, additionalClaims);
             // 生成新的刷新令牌，增强安全性
             final String newRefreshToken = jwtTokenUtil.generateRefreshToken(userDetails);
             
-            Optional<User> userOpt = userService.findByUsername(username);
-            
             Map<String, Object> response = new HashMap<>();
+            response.put("status", "success");
+            response.put("message", "令牌刷新成功");
             response.put("token", newToken);
             response.put("refreshToken", newRefreshToken);
+            response.put("tokenType", "Bearer");
+            response.put("expiresIn", jwtTokenUtil.getExpirationDateFromToken(newToken).getTime() / 1000);
             
-            userOpt.ifPresent(user -> {
-                Map<String, Object> userInfo = new HashMap<>();
-                userInfo.put("id", user.getId());
-                userInfo.put("username", user.getUsername());
-                response.put("user", userInfo);
-            });
+            // 构建用户信息响应
+            Map<String, Object> userInfo = buildUserInfoResponse(user);
+            response.put("user", userInfo);
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            Map<String, String> response = new HashMap<>();
-            response.put("message", "刷新令牌无效");
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("message", "刷新令牌无效: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
         }
     }
