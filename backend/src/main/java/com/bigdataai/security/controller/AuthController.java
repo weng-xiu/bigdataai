@@ -8,6 +8,7 @@ import com.bigdataai.user.model.User;
 import com.bigdataai.user.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -16,11 +17,23 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import javax.imageio.ImageIO;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.Random;
+
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -89,6 +102,117 @@ public class AuthController {
     }
 
     /**
+     * 生成验证码
+     * @param request HTTP请求
+     * @param response HTTP响应
+     * @throws IOException IO异常
+     */
+    @GetMapping(value = "/captcha", produces = MediaType.IMAGE_JPEG_VALUE)
+    public void generateCaptcha(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        // 设置响应头
+        response.setDateHeader("Expires", 0);
+        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        response.addHeader("Cache-Control", "post-check=0, pre-check=0");
+        response.setHeader("Pragma", "no-cache");
+        response.setContentType("image/jpeg");
+        
+        // 生成验证码
+        int width = 120;
+        int height = 40;
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics g = image.getGraphics();
+        
+        // 设置背景色
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, width, height);
+        
+        // 设置边框
+        g.setColor(Color.LIGHT_GRAY);
+        g.drawRect(0, 0, width - 1, height - 1);
+        
+        // 添加干扰线
+        Random random = new Random();
+        g.setColor(Color.LIGHT_GRAY);
+        for (int i = 0; i < 20; i++) {
+            int x = random.nextInt(width);
+            int y = random.nextInt(height);
+            int xl = random.nextInt(12);
+            int yl = random.nextInt(12);
+            g.drawLine(x, y, x + xl, y + yl);
+        }
+        
+        // 生成随机验证码
+        String captchaCode = generateCaptchaCode(4);
+        
+        // 将验证码存入session
+        HttpSession session = request.getSession();
+        session.setAttribute("captchaCode", captchaCode);
+        session.setAttribute("captchaExpireTime", System.currentTimeMillis() + 5 * 60 * 1000); // 5分钟有效期
+        
+        // 绘制验证码
+        g.setColor(new Color(19, 148, 246));
+        g.setFont(new Font("Arial", Font.BOLD, 28));
+        g.drawString(captchaCode, 12, 30);
+        g.dispose();
+        
+        // 输出图像
+        ImageIO.write(image, "JPEG", response.getOutputStream());
+    }
+    
+    /**
+     * 生成随机验证码
+     * @param length 验证码长度
+     * @return 验证码字符串
+     */
+    private String generateCaptchaCode(int length) {
+        String chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+        StringBuilder sb = new StringBuilder();
+        Random random = new Random();
+        for (int i = 0; i < length; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return sb.toString();
+    }
+    
+    /**
+     * 验证验证码
+     * @param captchaRequest 验证码请求
+     * @param request HTTP请求
+     * @return 验证结果
+     */
+    @PostMapping("/validate-captcha")
+    public ResponseEntity<?> validateCaptcha(@RequestBody Map<String, String> captchaRequest, HttpServletRequest request) {
+        String captcha = captchaRequest.get("captcha");
+        HttpSession session = request.getSession();
+        String sessionCaptcha = (String) session.getAttribute("captchaCode");
+        Long captchaExpireTime = (Long) session.getAttribute("captchaExpireTime");
+        
+        Map<String, Object> response = new HashMap<>();
+        
+        // 验证码为空或已过期
+        if (sessionCaptcha == null || captchaExpireTime == null || System.currentTimeMillis() > captchaExpireTime) {
+            response.put("status", "error");
+            response.put("message", "验证码已过期，请重新获取");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+        
+        // 验证码不匹配
+        if (!sessionCaptcha.equalsIgnoreCase(captcha)) {
+            response.put("status", "error");
+            response.put("message", "验证码错误");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+        
+        // 验证成功，清除session中的验证码
+        session.removeAttribute("captchaCode");
+        session.removeAttribute("captchaExpireTime");
+        
+        response.put("status", "success");
+        response.put("message", "验证码验证成功");
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
      * 用户登录
      * @param authRequest 登录请求
      * @return JWT令牌
@@ -97,16 +221,60 @@ public class AuthController {
     public ResponseEntity<?> login(@RequestBody Map<String, String> authRequest, 
                                   @RequestHeader(value = "X-Forwarded-For", required = false) String forwardedIp,
                                   @RequestHeader(value = "User-Agent", required = false) String userAgent,
-                                  @RequestHeader(value = "X-Real-IP", required = false) String realIp) {
+                                  @RequestHeader(value = "X-Real-IP", required = false) String realIp,
+                                  HttpServletRequest request) {
         String usernameOrEmail = authRequest.get("username");
         String password = authRequest.get("password");
+        String captcha = authRequest.get("captcha");
         
         // 参数验证
         if (usernameOrEmail == null || usernameOrEmail.trim().isEmpty() || 
             password == null || password.trim().isEmpty()) {
             Map<String, String> response = new HashMap<>();
+            response.put("status", "error");
             response.put("message", "用户名和密码不能为空");
             return ResponseEntity.badRequest().body(response);
+        }
+        
+        // 验证码校验
+        HttpSession session = request.getSession();
+        // 检查是否需要验证码（登录失败次数超过3次）
+        Integer loginFailCount = (Integer) session.getAttribute("loginFailCount_" + usernameOrEmail);
+        if (loginFailCount != null && loginFailCount >= 3) {
+            // 需要验证码
+            if (captcha == null || captcha.trim().isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "error");
+                response.put("message", "请输入验证码");
+                response.put("requireCaptcha", true);
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+            
+            // 验证验证码
+            String sessionCaptcha = (String) session.getAttribute("captchaCode");
+            Long captchaExpireTime = (Long) session.getAttribute("captchaExpireTime");
+            
+            // 验证码为空或已过期
+            if (sessionCaptcha == null || captchaExpireTime == null || System.currentTimeMillis() > captchaExpireTime) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "error");
+                response.put("message", "验证码已过期，请重新获取");
+                response.put("requireCaptcha", true);
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+            
+            // 验证码不匹配
+            if (!sessionCaptcha.equalsIgnoreCase(captcha)) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "error");
+                response.put("message", "验证码错误");
+                response.put("requireCaptcha", true);
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+            
+            // 验证成功，清除session中的验证码
+            session.removeAttribute("captchaCode");
+            session.removeAttribute("captchaExpireTime");
         }
         
         // 获取客户端IP地址
@@ -116,13 +284,30 @@ public class AuthController {
         }
         
         try {
-            // 使用UserService的login方法，支持用户名或邮箱登录，记录登录日志和处理账户锁定
+            // 使用Spring Security的AuthenticationManager进行认证
+            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(usernameOrEmail, password));
+            
+            // 认证成功后，使用UserService的login方法，支持用户名或邮箱登录，记录登录日志和处理账户锁定
             Optional<User> userOpt = userService.login(usernameOrEmail, password, ipAddress, userAgent);
             
             if (!userOpt.isPresent()) {
+                // 登录失败，增加失败计数
+                if (loginFailCount == null) {
+                    loginFailCount = 1;
+                } else {
+                    loginFailCount++;
+                }
+                session.setAttribute("loginFailCount_" + usernameOrEmail, loginFailCount);
+                
                 Map<String, Object> response = new HashMap<>();
                 response.put("status", "error");
                 response.put("message", "用户名/邮箱或密码错误");
+                
+                // 如果失败次数达到阈值，提示需要验证码
+                if (loginFailCount >= 3) {
+                    response.put("requireCaptcha", true);
+                }
+                
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
             }
             
@@ -145,6 +330,9 @@ public class AuthController {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
             }
             
+            // 登录成功，清除失败计数
+            session.removeAttribute("loginFailCount_" + usernameOrEmail);
+            
             // 生成JWT令牌
             final UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
             
@@ -152,12 +340,22 @@ public class AuthController {
             Map<String, Object> additionalClaims = new HashMap<>();
             additionalClaims.put("userId", user.getId());
             additionalClaims.put("email", user.getEmail());
+            additionalClaims.put("lastLoginTime", user.getLastLoginTime().getTime());
             
             // 添加角色信息
             List<String> roles = user.getRoles().stream()
                     .map(Role::getName)
                     .collect(Collectors.toList());
             additionalClaims.put("roles", roles);
+            
+            // 添加权限信息
+            List<String> permissions = new ArrayList<>();
+            for (Role role : user.getRoles()) {
+                for (Permission permission : role.getPermissions()) {
+                    permissions.add(permission.getPermission());
+                }
+            }
+            additionalClaims.put("permissions", permissions);
             
             // 生成带有额外信息的令牌
             final String token = jwtTokenUtil.generateToken(userDetails, additionalClaims);
@@ -293,6 +491,16 @@ public class AuthController {
                     .collect(Collectors.toList());
             additionalClaims.put("roles", roles);
             
+            // 添加权限信息 - 使用Set去重
+            Set<String> permissionSet = new HashSet<>();
+            for (Role role : user.getRoles()) {
+                for (Permission permission : role.getPermissions()) {
+                    permissionSet.add(permission.getPermission());
+                }
+            }
+            additionalClaims.put("permissions", new ArrayList<>(permissionSet));
+            additionalClaims.put("lastLoginTime", user.getLastLoginTime().getTime());
+            
             // 生成新令牌
             final String newToken = jwtTokenUtil.generateToken(userDetails, additionalClaims);
             // 生成新的刷新令牌，增强安全性
@@ -357,14 +565,14 @@ public class AuthController {
                             .collect(Collectors.toList());
                     userInfo.put("roles", roles);
                     
-                    // 添加权限信息
-                    List<String> permissions = new ArrayList<>();
+                    // 添加权限信息 - 使用Set去重
+                    Set<String> permissionSet = new HashSet<>();
                     for (Role role : user.getRoles()) {
                         for (Permission permission : role.getPermissions()) {
-                            permissions.add(permission.getPermission());
+                            permissionSet.add(permission.getPermission());
                         }
                     }
-                    userInfo.put("permissions", permissions);
+                    userInfo.put("permissions", new ArrayList<>(permissionSet));
                     
                     response.put("user", userInfo);
                 });
@@ -411,5 +619,4 @@ public class AuthController {
         response.put("message", e.getMessage());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
     }
-}
 }

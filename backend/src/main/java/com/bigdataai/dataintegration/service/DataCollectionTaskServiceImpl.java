@@ -1,9 +1,11 @@
 package com.bigdataai.dataintegration.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.bigdataai.dataintegration.mapper.DataCollectionTaskMapper;
+import com.bigdataai.dataintegration.mapper.DataSourceMapper;
 import com.bigdataai.dataintegration.model.DataCollectionTask;
 import com.bigdataai.dataintegration.model.DataSource;
 import com.bigdataai.dataintegration.model.DataSourceType;
-import com.bigdataai.dataintegration.repository.DataCollectionTaskRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.support.CronTrigger;
@@ -21,7 +23,7 @@ import java.util.concurrent.ScheduledFuture;
 public class DataCollectionTaskServiceImpl implements DataCollectionTaskService {
 
     @Autowired
-    private DataCollectionTaskRepository taskRepository;
+    private DataCollectionTaskMapper taskRepository;
     
     @Autowired
     private DataSourceService dataSourceService;

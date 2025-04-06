@@ -1,8 +1,9 @@
 package com.bigdataai.dataintegration.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.bigdataai.dataintegration.mapper.DataSourceMapper;
 import com.bigdataai.dataintegration.model.DataSource;
 import com.bigdataai.dataintegration.model.DataSourceType;
-import com.bigdataai.dataintegration.repository.DataSourceRepository;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -25,13 +26,13 @@ import java.util.*;
 public class DataSourceServiceImpl implements DataSourceService {
 
     @Autowired
-    private DataSourceRepository dataSourceRepository;
+    private DataSourceMapper dataSourceMapper;
 
     @Override
     @Transactional
     public DataSource createDataSource(DataSource dataSource) {
         // 检查数据源名称是否已存在
-        if (dataSourceRepository.existsByName(dataSource.getName())) {
+        if (dataSourceMapper.existsByName(dataSource.getName())) {
             throw new IllegalArgumentException("数据源名称已存在");
         }
 
@@ -40,18 +41,21 @@ public class DataSourceServiceImpl implements DataSourceService {
         dataSource.setUpdateTime(new Date());
 
         // 保存数据源
-        return dataSourceRepository.save(dataSource);
+        dataSourceMapper.insert(dataSource);
+        return dataSource;
     }
 
     @Override
     @Transactional
     public DataSource updateDataSource(DataSource dataSource) {
         // 检查数据源是否存在
-        DataSource existingDataSource = dataSourceRepository.findById(dataSource.getId())
-                .orElseThrow(() -> new IllegalArgumentException("数据源不存在"));
+        DataSource existingDataSource = dataSourceMapper.selectById(dataSource.getId());
+        if (existingDataSource == null) {
+            throw new IllegalArgumentException("数据源不存在");
+        }
 
         // 检查数据源名称是否已被其他数据源使用
-        DataSource dataSourceByName = dataSourceRepository.findByName(dataSource.getName());
+        DataSource dataSourceByName = dataSourceMapper.findByName(dataSource.getName());
         if (dataSourceByName != null && !dataSourceByName.getId().equals(dataSource.getId())) {
             throw new IllegalArgumentException("数据源名称已被其他数据源使用");
         }
@@ -68,37 +72,35 @@ public class DataSourceServiceImpl implements DataSourceService {
         existingDataSource.setUpdateTime(new Date());
 
         // 保存更新后的数据源
-        return dataSourceRepository.save(existingDataSource);
+        dataSourceMapper.updateById(existingDataSource);
+        return existingDataSource;
     }
 
     @Override
     public DataSource getDataSource(Long id) {
-        return dataSourceRepository.findById(id).orElse(null);
+        return dataSourceMapper.selectById(id);
     }
 
     @Override
     public DataSource getDataSourceByName(String name) {
-        return dataSourceRepository.findByName(name);
+        return dataSourceMapper.findByName(name);
     }
 
     @Override
     public List<DataSource> getAllDataSources() {
-        return dataSourceRepository.findAll();
+        return dataSourceMapper.selectList(null);
     }
 
     @Override
     public List<DataSource> getDataSourcesByType(DataSourceType type) {
-        return dataSourceRepository.findByType(type);
+        return dataSourceMapper.findByType(type);
     }
 
     @Override
     @Transactional
     public boolean deleteDataSource(Long id) {
-        if (dataSourceRepository.existsById(id)) {
-            dataSourceRepository.deleteById(id);
-            return true;
-        }
-        return false;
+        int result = dataSourceMapper.deleteById(id);
+        return result > 0;
     }
 
     @Override

@@ -1,8 +1,11 @@
 package com.bigdataai.dataintegration.model;
 
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
-import javax.persistence.*;
 import java.util.Date;
 import java.util.Map;
 
@@ -10,54 +13,32 @@ import java.util.Map;
  * 数据源实体类
  */
 @Data
-@Entity
-@Table(name = "data_source")
+@TableName("data_source")
 public class DataSource {
     
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(value = "id", type = IdType.AUTO)
     private Long id;
     
-    @Column(nullable = false)
     private String name;
     
-    @Column(nullable = false)
-    @Enumerated(EnumType.STRING)
     private DataSourceType type;
     
-    @Column(nullable = false)
     private String connectionUrl;
     
     private String username;
     
     private String password;
     
-    @Column(columnDefinition = "TEXT")
     private String description;
     
-    @ElementCollection
-    @CollectionTable(name = "data_source_properties", joinColumns = @JoinColumn(name = "data_source_id"))
-    @MapKeyColumn(name = "property_key")
-    @Column(name = "property_value")
+    @TableField(exist = false)
     private Map<String, String> properties;
     
-    @Column(nullable = false)
     private Boolean enabled = true;
     
-    @Column(nullable = false)
     private Date createTime;
     
-    @Column(nullable = false)
     private Date updateTime;
     
-    @PrePersist
-    protected void onCreate() {
-        createTime = new Date();
-        updateTime = new Date();
-    }
-    
-    @PreUpdate
-    protected void onUpdate() {
-        updateTime = new Date();
-    }
+
 }

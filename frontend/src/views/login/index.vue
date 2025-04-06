@@ -37,6 +37,21 @@
           <el-link type="primary" class="forget-password" href="#">忘记密码?</el-link>
         </div>
         
+        <!-- 验证码 -->
+        <el-form-item v-if="showCaptcha" prop="captcha">
+          <div class="captcha-container">
+            <el-input
+              v-model="loginForm.captcha"
+              placeholder="验证码"
+              class="captcha-input"
+              @keyup.enter="handleLogin"
+            />
+            <div class="captcha-image" @click="refreshCaptcha">
+              <img :src="captchaUrl" alt="验证码" />
+            </div>
+          </div>
+        </el-form-item>
+        
         <!-- 登录按钮 -->
         <el-button :loading="loading" type="primary" class="login-button" @click="handleLogin">登录</el-button>
       </el-form>
@@ -45,7 +60,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useStore } from 'vuex'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -63,11 +78,21 @@ const loading = ref(false)
 // 密码可见状态
 const passwordVisible = ref(false)
 
+// 是否显示验证码
+const showCaptcha = ref(false)
+
+// 验证码URL
+const captchaUrl = ref('')
+
+// 登录失败次数
+const loginFailCount = ref(parseInt(localStorage.getItem('loginFailCount') || '0'))
+
 // 登录表单数据
 const loginForm = reactive({
   username: '',
   password: '',
-  remember: localStorage.getItem('remember') === 'true'
+  remember: localStorage.getItem('remember') === 'true',
+  captcha: ''
 })
 
 // 如果记住了用户名，则自动填充
@@ -77,6 +102,9 @@ onMounted(() => {
     loginForm.username = rememberedUsername
     loginForm.remember = true
   }
+  
+  // 检查是否需要显示验证码
+  checkCaptchaRequired()
 })
 
 // 表单验证规则
@@ -103,7 +131,28 @@ const loginRules = {
   password: [
     { required: true, trigger: 'blur', message: '请输入密码' },
     { min: 6, max: 20, message: '密码长度应为6-20个字符', trigger: 'blur' }
+  ],
+  captcha: [
+    { required: true, trigger: 'blur', message: '请输入验证码' },
+    { min: 4, max: 6, message: '验证码长度不正确', trigger: 'blur' }
   ]
+}
+
+// 检查是否需要显示验证码
+const checkCaptchaRequired = () => {
+  // 如果登录失败次数超过3次，显示验证码
+  if (loginFailCount.value >= 3) {
+    showCaptcha.value = true
+    refreshCaptcha()
+  }
+}
+
+// 刷新验证码
+const refreshCaptcha = () => {
+  if (showCaptcha.value) {
+    // 添加时间戳防止缓存
+    captchaUrl.value = `/api/auth/captcha?t=${new Date().getTime()}`
+  }
 }
 
 // 处理登录
@@ -115,9 +164,32 @@ const handleLogin = () => {
       // 保存记住登录状态
       localStorage.setItem('remember', loginForm.remember)
       
-      store.dispatch('user/login', loginForm)
+      // 构建登录请求参数
+      const loginData = {
+        username: loginForm.username,
+        password: loginForm.password,
+        remember: loginForm.remember
+      }
+      
+      // 如果显示验证码，添加验证码参数
+      if (showCaptcha.value) {
+        loginData.captcha = loginForm.captcha
+      }
+      
+      store.dispatch('user/login', loginData)
         .then((user) => {
           ElMessage.success('登录成功')
+          
+          // 登录成功，重置登录失败次数
+          loginFailCount.value = 0
+          localStorage.removeItem('loginFailCount')
+          
+          // 如果选择了记住密码，可以在本地存储用户名
+          if (loginForm.remember) {
+            localStorage.setItem('rememberedUsername', loginForm.username)
+          } else {
+            localStorage.removeItem('rememberedUsername')
+          }
           
           // 根据用户角色决定跳转页面
           const roles = user.roles || []
@@ -128,6 +200,13 @@ const handleLogin = () => {
           }
         })
         .catch(error => {
+          // 登录失败，增加失败次数
+          loginFailCount.value++
+          localStorage.setItem('loginFailCount', loginFailCount.value)
+          
+          // 检查是否需要显示验证码
+          checkCaptchaRequired()
+          
           // 显示具体的错误信息
           if (error.response && error.response.data && error.response.data.message) {
             ElMessage.error(error.response.data.message)
@@ -190,6 +269,29 @@ const handleLogin = () => {
         
         .forget-password {
           font-size: 14px;
+        }
+      }
+      
+      .captcha-container {
+        display: flex;
+        align-items: center;
+        
+        .captcha-input {
+          flex: 1;
+        }
+        
+        .captcha-image {
+          margin-left: 10px;
+          cursor: pointer;
+          height: 40px;
+          width: 120px;
+          overflow: hidden;
+          
+          img {
+            height: 100%;
+            width: 100%;
+            object-fit: cover;
+          }
         }
       }
       

@@ -6,9 +6,9 @@ import com.bigdataai.user.model.User;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * 用户Mapper接口
@@ -66,7 +66,7 @@ public interface UserMapper extends BaseMapper<User> {
     @Select("<script>"
            + "SELECT * FROM users "
            + "<where>"
-           + "<if test='keyword != null and keyword != ""'>"
+           + "<if test='keyword != null and keyword != \"\"'>"
            + "username LIKE CONCAT('%', #{keyword}, '%') "
            + "OR email LIKE CONCAT('%', #{keyword}, '%') "
            + "OR full_name LIKE CONCAT('%', #{keyword}, '%')"
@@ -95,7 +95,7 @@ public interface UserMapper extends BaseMapper<User> {
      * @param lastLoginTime 最后登录时间
      * @return 影响行数
      */
-    @Select("UPDATE users SET last_login_time = #{lastLoginTime} WHERE id = #{userId}")
+    @Update("UPDATE users SET last_login_time = #{lastLoginTime} WHERE id = #{userId}")
     int updateLastLoginTime(@Param("userId") Long userId, @Param("lastLoginTime") java.util.Date lastLoginTime);
     
     /**
@@ -104,7 +104,7 @@ public interface UserMapper extends BaseMapper<User> {
      * @param loginFailCount 登录失败次数
      * @return 影响行数
      */
-    @Select("UPDATE users SET login_fail_count = #{loginFailCount} WHERE id = #{userId}")
+    @Update("UPDATE users SET login_fail_count = #{loginFailCount} WHERE id = #{userId}")
     int updateLoginFailCount(@Param("userId") Long userId, @Param("loginFailCount") Integer loginFailCount);
     
     /**
@@ -113,6 +113,6 @@ public interface UserMapper extends BaseMapper<User> {
      * @param locked 是否锁定
      * @return 影响行数
      */
-    @Select("UPDATE users SET locked = #{locked} WHERE id = #{userId}")
+    @Update("UPDATE users SET locked = #{locked} WHERE id = #{userId}")
     int updateLockedStatus(@Param("userId") Long userId, @Param("locked") Boolean locked);
 }

@@ -2,7 +2,7 @@ import request from '@/utils/request'
 
 /**
  * 用户登录
- * @param {Object} data - 登录信息 {username, password}
+ * @param {Object} data - 登录信息 {username, password, captcha}
  * @returns {Promise}
  */
 export function login(data) {
@@ -10,6 +10,31 @@ export function login(data) {
     url: '/auth/login',
     method: 'post',
     data
+  })
+}
+
+/**
+ * 获取验证码
+ * @returns {Promise}
+ */
+export function getCaptcha() {
+  return request({
+    url: '/auth/captcha',
+    method: 'get',
+    responseType: 'blob'
+  })
+}
+
+/**
+ * 验证验证码
+ * @param {string} captcha - 验证码
+ * @returns {Promise}
+ */
+export function validateCaptcha(captcha) {
+  return request({
+    url: '/auth/validate-captcha',
+    method: 'post',
+    data: { captcha }
   })
 }
 

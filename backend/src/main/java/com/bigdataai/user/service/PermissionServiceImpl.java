@@ -1,7 +1,8 @@
 package com.bigdataai.user.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.bigdataai.user.mapper.PermissionMapper;
 import com.bigdataai.user.model.Permission;
-import com.bigdataai.user.repository.PermissionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,85 +17,103 @@ import java.util.Optional;
 public class PermissionServiceImpl implements PermissionService {
 
     @Autowired
-    private PermissionRepository permissionRepository;
+    private PermissionMapper permissionMapper;
 
     @Override
     @Transactional
     public Permission createPermission(Permission permission) {
         // 检查权限名是否已存在
-        Optional<Permission> existingPermission = permissionRepository.findByName(permission.getName());
-        if (existingPermission.isPresent()) {
+        Permission existingPermission = permissionMapper.selectOne(
+            new LambdaQueryWrapper<Permission>().eq(Permission::getName, permission.getName())
+        );
+        if (existingPermission != null) {
             throw new RuntimeException("权限名已存在");
         }
         
         // 检查权限标识是否已存在
         if (permission.getPermission() != null) {
-            Optional<Permission> existingPermByCode = permissionRepository.findByPermission(permission.getPermission());
-            if (existingPermByCode.isPresent()) {
+            Permission existingPermByCode = permissionMapper.selectOne(
+                new LambdaQueryWrapper<Permission>().eq(Permission::getPermission, permission.getPermission())
+            );
+            if (existingPermByCode != null) {
                 throw new RuntimeException("权限标识已存在");
             }
         }
         
-        return permissionRepository.save(permission);
+        permissionMapper.insert(permission);
+        return permission;
     }
 
     @Override
     public Optional<Permission> findById(Long id) {
-        return permissionRepository.findById(id);
+        return Optional.ofNullable(permissionMapper.selectById(id));
     }
     
     @Override
     public Optional<Permission> findByName(String name) {
-        return permissionRepository.findByName(name);
+        return Optional.ofNullable(permissionMapper.selectOne(
+            new LambdaQueryWrapper<Permission>().eq(Permission::getName, name)
+        ));
     }
 
     @Override
     public Optional<Permission> findByPermission(String permission) {
-        return permissionRepository.findByPermission(permission);
+        return Optional.ofNullable(permissionMapper.selectOne(
+            new LambdaQueryWrapper<Permission>().eq(Permission::getPermission, permission)
+        ));
     }
 
     @Override
     public List<Permission> findAll() {
-        return permissionRepository.findAll();
+        return permissionMapper.selectList(null);
     }
 
     @Override
     @Transactional
     public Permission updatePermission(Permission permission) {
         // 检查权限是否存在
-        Optional<Permission> existingPermission = permissionRepository.findById(permission.getId());
-        if (!existingPermission.isPresent()) {
+        Permission existingPermission = permissionMapper.selectById(permission.getId());
+        if (existingPermission == null) {
             throw new RuntimeException("权限不存在");
         }
         
         // 检查权限名是否与其他权限重复
-        Optional<Permission> permByName = permissionRepository.findByName(permission.getName());
-        if (permByName.isPresent() && !permByName.get().getId().equals(permission.getId())) {
+        Permission permByName = permissionMapper.selectOne(
+            new LambdaQueryWrapper<Permission>()
+                .eq(Permission::getName, permission.getName())
+                .ne(Permission::getId, permission.getId())
+        );
+        if (permByName != null) {
             throw new RuntimeException("权限名已存在");
         }
         
         // 检查权限标识是否与其他权限重复
         if (permission.getPermission() != null) {
-            Optional<Permission> permByCode = permissionRepository.findByPermission(permission.getPermission());
-            if (permByCode.isPresent() && !permByCode.get().getId().equals(permission.getId())) {
+            Permission permByCode = permissionMapper.selectOne(
+                new LambdaQueryWrapper<Permission>()
+                    .eq(Permission::getPermission, permission.getPermission())
+                    .ne(Permission::getId, permission.getId())
+            );
+            if (permByCode != null) {
                 throw new RuntimeException("权限标识已存在");
             }
         }
         
-        return permissionRepository.save(permission);
+        permissionMapper.updateById(permission);
+        return permission;
     }
 
     @Override
     @Transactional
     public void deletePermission(Long id) {
         // 检查权限是否存在
-        Optional<Permission> existingPermission = permissionRepository.findById(id);
-        if (!existingPermission.isPresent()) {
+        Permission existingPermission = permissionMapper.selectById(id);
+        if (existingPermission == null) {
             throw new RuntimeException("权限不存在");
         }
         
         // TODO: 检查权限是否被角色使用，如果被使用则不能删除
         
-        permissionRepository.deleteById(id);
+        permissionMapper.deleteById(id);
     }
 }
