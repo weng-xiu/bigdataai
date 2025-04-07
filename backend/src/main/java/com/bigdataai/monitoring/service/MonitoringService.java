@@ -22,24 +22,42 @@ public interface MonitoringService {
     List<Map<String, Object>> getDataProcessingTaskStatus();
 
     /**
-     * 添加告警规则
+     * 设置告警规则
      * @param metricName 指标名称
      * @param threshold 阈值
      * @param operator 比较运算符
      * @param alertLevel 告警级别
+     * @return 操作结果
      */
-    void addAlertRule(String metricName, double threshold, String operator, String alertLevel);
+    Map<String, Object> setAlertRule(String metricName, double threshold, String operator, String alertLevel);
 
     /**
      * 获取历史指标数据
      * @param metricName 指标名称
-     * @return 该指标的历史数据列表
+     * @param startTime 开始时间
+     * @param endTime 结束时间
+     * @param interval 时间间隔
+     * @return 包含历史指标数据的Map
      */
-    List<MetricData> getMetricHistory(String metricName);
+    Map<String, Object> getMetricHistory(String metricName, String startTime, String endTime, String interval);
 
     /**
      * 获取数据存储状态
      * @return 包含数据存储状态信息的Map
      */
     Map<String, Object> getDataStorageStatus();
+    
+    /**
+     * 获取数据接入状态
+     * @return 包含数据接入状态信息的列表
+     */
+    List<Map<String, Object>> getDataIntegrationStatus();
+    
+    /**
+     * 获取告警信息
+     * @param startTime 开始时间
+     * @param endTime 结束时间
+     * @return 包含告警信息的列表
+     */
+    List<Map<String, Object>> getAlerts(String startTime, String endTime);
 }

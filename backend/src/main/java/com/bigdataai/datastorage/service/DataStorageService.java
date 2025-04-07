@@ -153,4 +153,22 @@ public interface DataStorageService {
      * @return 是否删除成功
      */
     boolean deleteElasticsearchIndex(String indexName);
+    
+    /**
+     * 获取HDFS存储状态信息
+     * @return 包含HDFS存储状态的Map
+     */
+    Map<String, Object> getHdfsStatus();
+    
+    /**
+     * 获取HBase存储状态信息
+     * @return 包含HBase存储状态的Map
+     */
+    Map<String, Object> getHbaseStatus();
+    
+    /**
+     * 获取Elasticsearch存储状态信息
+     * @return 包含Elasticsearch存储状态的Map
+     */
+    Map<String, Object> getElasticsearchStatus();
 }
