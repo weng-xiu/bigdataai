@@ -206,7 +206,7 @@ public class DataCollectorServiceImpl implements DataCollectorService {
             conf.set("hbase.zookeeper.quorum", dataSource.getConnectionUrl());
             
             // 获取HBase连接
-            Connection connection = ConnectionFactory.createConnection(conf);
+            org.apache.hadoop.hbase.client.Connection connection = ConnectionFactory.createConnection(conf);
             Table table = connection.getTable(TableName.valueOf(tableName));
             
             // 创建扫描器
@@ -247,12 +247,11 @@ public class DataCollectorServiceImpl implements DataCollectorService {
         try {
             // 创建Elasticsearch客户端
             // 实际应用中应该使用连接池或单例模式管理客户端
+            String host = dataSource.getConnectionUrl().split(":")[0];
+            int port = Integer.parseInt(dataSource.getConnectionUrl().split(":")[1]);
             RestHighLevelClient client = new RestHighLevelClient(
                     org.elasticsearch.client.RestClient.builder(
-                            new org.elasticsearch.common.transport.TransportAddress(
-                                    java.net.InetAddress.getByName(dataSource.getConnectionUrl().split(":")[0]),
-                                    Integer.parseInt(dataSource.getConnectionUrl().split(":")[1])
-                            )
+                            new org.apache.http.HttpHost(host, port, "http")
                     )
             );
             

@@ -530,4 +530,87 @@ public class DataStorageServiceImpl implements DataStorageService {
             return false;
         }
     }
+    
+    @Override
+    public Map<String, Object> getHbaseStatus() {
+        Map<String, Object> status = new HashMap<>();
+        try (Connection connection = getHBaseConnection()) {
+            Admin admin = connection.getAdmin();
+            
+            // 获取HBase状态信息
+            status.put("available", true);
+            status.put("clusterStatus", "running");
+            
+            // 获取表数量
+            List<String> tableNames = new ArrayList<>();
+            for (TableName tableName : admin.listTableNames()) {
+                tableNames.add(tableName.getNameAsString());
+            }
+            status.put("tables", tableNames.size());
+            status.put("tableList", tableNames);
+            
+            // 获取集群信息
+            ClusterStatus clusterStatus = admin.getClusterStatus();
+            status.put("servers", clusterStatus.getServersSize());
+            status.put("deadServers", clusterStatus.getDeadServersSize());
+            status.put("regions", clusterStatus.getRegionsCount());
+            status.put("averageLoad", clusterStatus.getAverageLoad());
+            
+            status.put("success", true);
+        } catch (IOException e) {
+            status.put("available", false);
+            status.put("success", false);
+            status.put("message", "获取HBase状态失败: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return status;
+    }
+    
+    @Override
+    public Map<String, Object> getElasticsearchStatus() {
+        Map<String, Object> status = new HashMap<>();
+        try {
+            // 获取集群健康状态
+            org.elasticsearch.client.indices.GetIndexRequest request = new org.elasticsearch.client.indices.GetIndexRequest("*");
+            boolean exists = elasticsearchClient.indices().exists(request, RequestOptions.DEFAULT);
+            
+            status.put("available", true);
+            
+            // 获取索引列表
+            List<String> indices = new ArrayList<>();
+            if (exists) {
+                org.elasticsearch.action.admin.cluster.health.ClusterHealthRequest healthRequest = 
+                        new org.elasticsearch.action.admin.cluster.health.ClusterHealthRequest();
+                org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse healthResponse = 
+                        elasticsearchClient.cluster().health(healthRequest, RequestOptions.DEFAULT);
+                
+                status.put("clusterName", healthResponse.getClusterName());
+                status.put("status", healthResponse.getStatus().toString());
+                status.put("numberOfNodes", healthResponse.getNumberOfNodes());
+                status.put("numberOfDataNodes", healthResponse.getNumberOfDataNodes());
+                status.put("activeShards", healthResponse.getActiveShards());
+                status.put("activePrimaryShards", healthResponse.getActivePrimaryShards());
+                
+                // 获取所有索引
+                org.elasticsearch.client.indices.GetIndexRequest indexRequest = 
+                        new org.elasticsearch.client.indices.GetIndexRequest("*");
+                org.elasticsearch.client.indices.GetIndexResponse indexResponse = 
+                        elasticsearchClient.indices().get(indexRequest, RequestOptions.DEFAULT);
+                
+                for (String indexName : indexResponse.getIndices()) {
+                    indices.add(indexName);
+                }
+            }
+            
+            status.put("indices", indices.size());
+            status.put("indexList", indices);
+            status.put("success", true);
+        } catch (IOException e) {
+            status.put("available", false);
+            status.put("success", false);
+            status.put("message", "获取Elasticsearch状态失败: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return status;
+    }
 }

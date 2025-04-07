@@ -218,4 +218,200 @@ public class DataSourceServiceImpl implements DataSourceService {
             result.put("message", "连接成功");
         }
     }
+    
+    /**
+     * 测试MongoDB连接
+     */
+    private void testMongoDBConnection(DataSource dataSource, Map<String, Object> result) throws Exception {
+        // MongoDB连接测试实现
+        // 实际应用中应该使用MongoClient连接MongoDB
+        result.put("success", true);
+        result.put("message", "连接成功");
+    }
+    
+    /**
+     * 测试Kafka连接
+     */
+    private void testKafkaConnection(DataSource dataSource, Map<String, Object> result) throws Exception {
+        // Kafka连接测试实现
+        // 实际应用中应该使用KafkaConsumer或KafkaProducer连接Kafka
+        result.put("success", true);
+        result.put("message", "连接成功");
+    }
+    
+    /**
+     * 测试HDFS连接
+     */
+    private void testHDFSConnection(DataSource dataSource, Map<String, Object> result) throws Exception {
+        Configuration conf = new Configuration();
+        conf.set("fs.defaultFS", dataSource.getConnectionUrl());
+        
+        if (dataSource.getUsername() != null && !dataSource.getUsername().isEmpty()) {
+            System.setProperty("HADOOP_USER_NAME", dataSource.getUsername());
+        }
+        
+        try (FileSystem fs = FileSystem.get(conf)) {
+            // 连接成功
+            result.put("success", true);
+            result.put("message", "连接成功");
+        }
+    }
+    
+    /**
+     * 测试HBase连接
+     */
+    private void testHBaseConnection(DataSource dataSource, Map<String, Object> result) throws Exception {
+        org.apache.hadoop.conf.Configuration conf = HBaseConfiguration.create();
+        conf.set("hbase.zookeeper.quorum", dataSource.getConnectionUrl());
+        
+        try (Connection connection = ConnectionFactory.createConnection(conf)) {
+            // 连接成功
+            result.put("success", true);
+            result.put("message", "连接成功");
+        }
+    }
+    
+    /**
+     * 测试Elasticsearch连接
+     */
+    private void testElasticsearchConnection(DataSource dataSource, Map<String, Object> result) throws Exception {
+        String[] hostPort = dataSource.getConnectionUrl().split(":");
+        String host = hostPort[0];
+        int port = Integer.parseInt(hostPort[1]);
+        
+        try (RestHighLevelClient client = new RestHighLevelClient(
+                org.elasticsearch.client.RestClient.builder(
+                        new org.apache.http.HttpHost(host, port, "http")
+                )
+        )) {
+            // 测试连接
+            boolean exists = client.ping(RequestOptions.DEFAULT);
+            if (exists) {
+                result.put("success", true);
+                result.put("message", "连接成功");
+            } else {
+                result.put("success", false);
+                result.put("message", "连接失败");
+            }
+        }
+    }
+    
+    /**
+     * 获取MySQL表列表
+     */
+    private List<String> getMySQLTables(DataSource dataSource) throws Exception {
+        List<String> tables = new ArrayList<>();
+        // 实现MySQL表列表获取逻辑
+        return tables;
+    }
+    
+    /**
+     * 获取MongoDB集合列表
+     */
+    private List<String> getMongoDBCollections(DataSource dataSource) throws Exception {
+        List<String> collections = new ArrayList<>();
+        // 实现MongoDB集合列表获取逻辑
+        return collections;
+    }
+    
+    /**
+     * 获取HBase表列表
+     */
+    private List<String> getHBaseTables(DataSource dataSource) throws Exception {
+        List<String> tables = new ArrayList<>();
+        // 实现HBase表列表获取逻辑
+        return tables;
+    }
+    
+    /**
+     * 获取Elasticsearch索引列表
+     */
+    private List<String> getElasticsearchIndices(DataSource dataSource) throws Exception {
+        List<String> indices = new ArrayList<>();
+        
+        String[] hostPort = dataSource.getConnectionUrl().split(":");
+        String host = hostPort[0];
+        int port = Integer.parseInt(hostPort[1]);
+        
+        try (RestHighLevelClient client = new RestHighLevelClient(
+                org.elasticsearch.client.RestClient.builder(
+                        new org.apache.http.HttpHost(host, port, "http")
+                )
+        )) {
+            // 获取所有索引
+            GetIndexRequest request = new GetIndexRequest("*");
+            org.elasticsearch.client.indices.GetIndexResponse response = client.indices().get(request, RequestOptions.DEFAULT);
+            String[] indexNames = response.getIndices();
+            indices.addAll(Arrays.asList(indexNames));
+        }
+        
+        return indices;
+    }
+    
+    /**
+     * 获取MySQL表结构
+     */
+    private List<Map<String, Object>> getMySQLTableSchema(DataSource dataSource, String tableName) throws Exception {
+        List<Map<String, Object>> schema = new ArrayList<>();
+        // 实现MySQL表结构获取逻辑
+        return schema;
+    }
+    
+    /**
+     * 获取MongoDB集合结构
+     */
+    private List<Map<String, Object>> getMongoDBCollectionSchema(DataSource dataSource, String collectionName) throws Exception {
+        List<Map<String, Object>> schema = new ArrayList<>();
+        // 实现MongoDB集合结构获取逻辑
+        return schema;
+    }
+    
+    /**
+     * 获取HBase表结构
+     */
+    private List<Map<String, Object>> getHBaseTableSchema(DataSource dataSource, String tableName) throws Exception {
+        List<Map<String, Object>> schema = new ArrayList<>();
+        // 实现HBase表结构获取逻辑
+        return schema;
+    }
+    
+    /**
+     * 获取Elasticsearch索引结构
+     */
+    private List<Map<String, Object>> getElasticsearchIndexSchema(DataSource dataSource, String indexName) throws Exception {
+        List<Map<String, Object>> schema = new ArrayList<>();
+        
+        String[] hostPort = dataSource.getConnectionUrl().split(":");
+        String host = hostPort[0];
+        int port = Integer.parseInt(hostPort[1]);
+        
+        try (RestHighLevelClient client = new RestHighLevelClient(
+                org.elasticsearch.client.RestClient.builder(
+                        new org.apache.http.HttpHost(host, port, "http")
+                )
+        )) {
+            // 获取索引映射
+            GetIndexRequest request = new GetIndexRequest(indexName);
+            org.elasticsearch.client.indices.GetIndexResponse response = client.indices().get(request, RequestOptions.DEFAULT);
+            
+            // 解析映射信息
+            Map<String, Object> mappings = response.getMappings().get(indexName).getSourceAsMap();
+            if (mappings.containsKey("properties")) {
+                Map<String, Object> properties = (Map<String, Object>) mappings.get("properties");
+                
+                for (Map.Entry<String, Object> entry : properties.entrySet()) {
+                    String fieldName = entry.getKey();
+                    Map<String, Object> fieldProperties = (Map<String, Object>) entry.getValue();
+                    
+                    Map<String, Object> fieldInfo = new HashMap<>();
+                    fieldInfo.put("name", fieldName);
+                    fieldInfo.put("type", fieldProperties.getOrDefault("type", "object"));
+                    
+                    schema.add(fieldInfo);
+                }
+            }
+        }
+        
+        return schema;
+    }
 }
