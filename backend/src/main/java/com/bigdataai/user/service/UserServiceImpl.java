@@ -18,6 +18,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.Map;
+import java.util.Collections;
+import java.util.Objects;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
@@ -56,7 +59,6 @@ public class UserServiceImpl implements UserService {
     @Value("${security.login.lock-duration-minutes:30}")
     private int lockDurationMinutes;
 
-    @Override
     @Transactional
     public User registerUser(User user) {
         return registerUser(user, "ROLE_USER");
