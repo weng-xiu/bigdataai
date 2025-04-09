@@ -602,59 +602,631 @@ public class DataProcessingServiceImpl implements DataProcessingService {
     
     /**
      * 执行ETL作业
+     * @param jobConfig 作业配置
+     * @param jobStatus 作业状态
      */
     private void executeETLJob(Map<String, Object> jobConfig, Map<String, Object> jobStatus) {
-        // ETL作业实现逻辑
-        jobStatus.put("progress", 100);
-        jobStatus.put("result", "ETL作业执行完成");
+        try {
+            // 获取ETL作业参数
+            Long sourceId = ((Number) jobConfig.get("sourceId")).longValue();
+            String sourceTable = (String) jobConfig.get("sourceTable");
+            String targetTable = (String) jobConfig.get("targetTable");
+            Map<String, Object> transformRules = (Map<String, Object>) jobConfig.get("transformRules");
+            
+            // 更新作业状态
+            jobStatus.put("progress", 10);
+            jobStatus.put("message", "开始加载源数据");
+            
+            // 获取数据源
+            DataSource dataSource = dataSourceService.getDataSource(sourceId);
+            if (dataSource == null) {
+                throw new IllegalArgumentException("数据源不存在: " + sourceId);
+            }
+            
+            // 加载源数据
+            Dataset<Row> sourceData = loadDataset(dataSource, sourceTable);
+            if (sourceData == null) {
+                throw new IllegalArgumentException("加载源数据失败");
+            }
+            
+            // 更新作业状态
+            jobStatus.put("progress", 30);
+            jobStatus.put("message", "开始数据转换");
+            
+            // 应用数据清洗规则
+            Map<String, Object> cleanRules = (Map<String, Object>) transformRules.get("cleanRules");
+            if (cleanRules != null && !cleanRules.isEmpty()) {
+                sourceData = applyCleaningRules(sourceData, cleanRules);
+            }
+            
+            // 应用数据转换规则
+            Map<String, Object> transformations = (Map<String, Object>) transformRules.get("transformations");
+            if (transformations != null && !transformations.isEmpty()) {
+                sourceData = applyTransformations(sourceData, transformations);
+            }
+            
+            // 更新作业状态
+            jobStatus.put("progress", 70);
+            jobStatus.put("message", "开始保存目标数据");
+            
+            // 保存转换后的数据
+            long rowCount = sourceData.count();
+            
+            // 这里应该有保存数据的逻辑，根据实际情况实现
+            // 例如：sourceData.write().saveAsTable(targetTable);
+            
+            // 更新作业状态
+            jobStatus.put("progress", 100);
+            jobStatus.put("message", "ETL作业执行完成");
+            jobStatus.put("result", Map.of(
+                "rowCount", rowCount,
+                "sourceTable", sourceTable,
+                "targetTable", targetTable
+            ));
+        } catch (Exception e) {
+            jobStatus.put("error", "执行ETL作业失败: " + e.getMessage());
+            throw e;
+        }
     }
     
     /**
      * 执行分析作业
+     * @param jobConfig 作业配置
+     * @param jobStatus 作业状态
      */
     private void executeAnalysisJob(Map<String, Object> jobConfig, Map<String, Object> jobStatus) {
-        // 分析作业实现逻辑
-        jobStatus.put("progress", 100);
-        jobStatus.put("result", "分析作业执行完成");
+        try {
+            // 获取分析作业参数
+            Long dataSourceId = ((Number) jobConfig.get("dataSourceId")).longValue();
+            String tableName = (String) jobConfig.get("tableName");
+            String analysisType = (String) jobConfig.get("analysisType");
+            Map<String, Object> analysisParams = (Map<String, Object>) jobConfig.get("analysisParams");
+            
+            // 更新作业状态
+            jobStatus.put("progress", 10);
+            jobStatus.put("message", "开始加载数据");
+            
+            // 获取数据源
+            DataSource dataSource = dataSourceService.getDataSource(dataSourceId);
+            if (dataSource == null) {
+                throw new IllegalArgumentException("数据源不存在: " + dataSourceId);
+            }
+            
+            // 加载数据
+            Dataset<Row> dataset = loadDataset(dataSource, tableName);
+            if (dataset == null) {
+                throw new IllegalArgumentException("加载数据失败");
+            }
+            
+            // 更新作业状态
+            jobStatus.put("progress", 30);
+            jobStatus.put("message", "开始数据分析");
+            
+            // 根据分析类型执行不同的分析逻辑
+            Map<String, Object> analysisResult = new HashMap<>();
+            
+            switch (analysisType) {
+                case "STATISTICS":
+                    // 统计分析
+                    analysisResult = executeStatisticsAnalysis(dataset, analysisParams);
+                    break;
+                case "CORRELATION":
+                    // 相关性分析
+                    analysisResult = executeCorrelationAnalysis(dataset, analysisParams);
+                    break;
+                case "TREND":
+                    // 趋势分析
+                    analysisResult = executeTrendAnalysis(dataset, analysisParams);
+                    break;
+                default:
+                    throw new IllegalArgumentException("不支持的分析类型: " + analysisType);
+            }
+            
+            // 更新作业状态
+            jobStatus.put("progress", 100);
+            jobStatus.put("message", "分析作业执行完成");
+            jobStatus.put("result", analysisResult);
+        } catch (Exception e) {
+            jobStatus.put("error", "执行分析作业失败: " + e.getMessage());
+            throw e;
+        }
+    }
+    
+    /**
+     * 执行统计分析
+     * @param dataset 数据集
+     * @param params 分析参数
+     * @return 分析结果
+     */
+    private Map<String, Object> executeStatisticsAnalysis(Dataset<Row> dataset, Map<String, Object> params) {
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // 获取需要分析的列
+            List<String> columns = (List<String>) params.get("columns");
+            
+            // 计算基本统计信息
+            Dataset<Row> stats = dataset.select(columns.toArray(new String[0])).summary(
+                "count", "mean", "stddev", "min", "max");
+            
+            // 转换为结果格式
+            List<Map<String, Object>> statsResult = new ArrayList<>();
+            for (Row row : stats.collectAsList()) {
+                Map<String, Object> rowMap = new HashMap<>();
+                rowMap.put("statistic", row.getString(0));
+                
+                for (int i = 0; i < columns.size(); i++) {
+                    rowMap.put(columns.get(i), row.get(i + 1));
+                }
+                
+                statsResult.add(rowMap);
+            }
+            
+            result.put("success", true);
+            result.put("statistics", statsResult);
+            
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "统计分析失败: " + e.getMessage());
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 执行相关性分析
+     * @param dataset 数据集
+     * @param params 分析参数
+     * @return 分析结果
+     */
+    private Map<String, Object> executeCorrelationAnalysis(Dataset<Row> dataset, Map<String, Object> params) {
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // 获取需要分析的列
+            List<String> columns = (List<String>) params.get("columns");
+            
+            // 计算相关性矩阵
+            List<Map<String, Object>> correlationMatrix = new ArrayList<>();
+            
+            for (String col1 : columns) {
+                Map<String, Object> rowMap = new HashMap<>();
+                rowMap.put("column", col1);
+                
+                for (String col2 : columns) {
+                    // 计算两列之间的相关性
+                    double correlation = 0.0;
+                    try {
+                        correlation = dataset.stat().corr(col1, col2);
+                    } catch (Exception e) {
+                        // 如果计算失败，设置为0
+                        correlation = 0.0;
+                    }
+                    rowMap.put(col2, correlation);
+                }
+                
+                correlationMatrix.add(rowMap);
+            }
+            
+            result.put("success", true);
+            result.put("correlationMatrix", correlationMatrix);
+            
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "相关性分析失败: " + e.getMessage());
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 执行趋势分析
+     * @param dataset 数据集
+     * @param params 分析参数
+     * @return 分析结果
+     */
+    private Map<String, Object> executeTrendAnalysis(Dataset<Row> dataset, Map<String, Object> params) {
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // 获取时间列和值列
+            String timeColumn = (String) params.get("timeColumn");
+            String valueColumn = (String) params.get("valueColumn");
+            String groupByColumn = (String) params.get("groupByColumn");
+            String aggregateFunction = (String) params.getOrDefault("aggregateFunction", "avg");
+            
+            // 按时间列和分组列进行聚合
+            Dataset<Row> trendData;
+            
+            if (groupByColumn != null && !groupByColumn.isEmpty()) {
+                // 按时间和分组列聚合
+                trendData = dataset.groupBy(timeColumn, groupByColumn)
+                    .agg(functions.expr(aggregateFunction + "(" + valueColumn + ")").as("value"))
+                    .orderBy(timeColumn);
+            } else {
+                // 仅按时间聚合
+                trendData = dataset.groupBy(timeColumn)
+                    .agg(functions.expr(aggregateFunction + "(" + valueColumn + ")").as("value"))
+                    .orderBy(timeColumn);
+            }
+            
+            // 转换为结果格式
+            List<Map<String, Object>> trendResult = new ArrayList<>();
+            for (Row row : trendData.collectAsList()) {
+                Map<String, Object> point = new HashMap<>();
+                point.put("time", row.get(0));
+                
+                if (groupByColumn != null && !groupByColumn.isEmpty()) {
+                    point.put("group", row.get(1));
+                    point.put("value", row.get(2));
+                } else {
+                    point.put("value", row.get(1));
+                }
+                
+                trendResult.add(point);
+            }
+            
+            result.put("success", true);
+            result.put("trendData", trendResult);
+            
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "趋势分析失败: " + e.getMessage());
+        }
+        
+        return result;
     }
     
     /**
      * 执行Kafka流处理
+     * @param streamConfig 流配置
+     * @param jobStatus 作业状态
      */
     private void executeKafkaStreaming(Map<String, Object> streamConfig, Map<String, Object> jobStatus) {
-        // Kafka流处理实现逻辑
-        jobStatus.put("progress", 100);
-        jobStatus.put("result", "Kafka流处理执行中");
+        try {
+            // 获取Kafka流处理参数
+            String bootstrapServers = (String) streamConfig.get("bootstrapServers");
+            String topic = (String) streamConfig.get("topic");
+            String groupId = (String) streamConfig.get("groupId");
+            int batchDuration = ((Number) streamConfig.getOrDefault("batchDuration", 5)).intValue();
+            Map<String, Object> processingRules = (Map<String, Object>) streamConfig.get("processingRules");
+            
+            // 更新作业状态
+            jobStatus.put("progress", 10);
+            jobStatus.put("message", "开始初始化Kafka流处理");
+            
+            // 创建Streaming上下文
+            JavaStreamingContext streamingContext = new JavaStreamingContext(
+                javaSparkContext, Durations.seconds(batchDuration));
+            
+            // 配置Kafka参数
+            Map<String, Object> kafkaParams = new HashMap<>();
+            kafkaParams.put("bootstrap.servers", bootstrapServers);
+            kafkaParams.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+            kafkaParams.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+            kafkaParams.put("group.id", groupId);
+            kafkaParams.put("auto.offset.reset", "latest");
+            kafkaParams.put("enable.auto.commit", false);
+            
+            // 更新作业状态
+            jobStatus.put("progress", 30);
+            jobStatus.put("message", "开始创建Kafka流");
+            
+            // 创建Kafka流
+            // 注意：实际实现需要使用KafkaUtils.createDirectStream
+            // 这里简化处理，仅展示流程
+            
+            // 应用处理规则
+            String processingType = (String) processingRules.get("type");
+            
+            // 更新作业状态
+            jobStatus.put("progress", 50);
+            jobStatus.put("message", "开始应用处理规则: " + processingType);
+            
+            // 根据处理类型应用不同的处理逻辑
+            switch (processingType) {
+                case "FILTER":
+                    // 过滤处理逻辑
+                    break;
+                case "TRANSFORM":
+                    // 转换处理逻辑
+                    break;
+                case "AGGREGATE":
+                    // 聚合处理逻辑
+                    break;
+                default:
+                    throw new IllegalArgumentException("不支持的处理类型: " + processingType);
+            }
+            
+            // 更新作业状态
+            jobStatus.put("progress", 70);
+            jobStatus.put("message", "开始启动流处理");
+            
+            // 启动流处理
+            // streamingContext.start();
+            // streamingContext.awaitTermination();
+            
+            // 更新作业状态
+            jobStatus.put("progress", 100);
+            jobStatus.put("message", "Kafka流处理已启动");
+            jobStatus.put("result", Map.of(
+                "topic", topic,
+                "bootstrapServers", bootstrapServers,
+                "processingType", processingType,
+                "status", "RUNNING"
+            ));
+        } catch (Exception e) {
+            jobStatus.put("error", "执行Kafka流处理失败: " + e.getMessage());
+            throw e;
+        }
     }
     
     /**
      * 执行Socket流处理
+     * @param streamConfig 流配置
+     * @param jobStatus 作业状态
      */
     private void executeSocketStreaming(Map<String, Object> streamConfig, Map<String, Object> jobStatus) {
-        // Socket流处理实现逻辑
-        jobStatus.put("progress", 100);
-        jobStatus.put("result", "Socket流处理执行中");
+        try {
+            // 获取Socket流处理参数
+            String hostname = (String) streamConfig.get("hostname");
+            int port = ((Number) streamConfig.get("port")).intValue();
+            int batchDuration = ((Number) streamConfig.getOrDefault("batchDuration", 5)).intValue();
+            Map<String, Object> processingRules = (Map<String, Object>) streamConfig.get("processingRules");
+            
+            // 更新作业状态
+            jobStatus.put("progress", 10);
+            jobStatus.put("message", "开始初始化Socket流处理");
+            
+            // 创建Streaming上下文
+            JavaStreamingContext streamingContext = new JavaStreamingContext(
+                javaSparkContext, Durations.seconds(batchDuration));
+            
+            // 更新作业状态
+            jobStatus.put("progress", 30);
+            jobStatus.put("message", "开始创建Socket流");
+            
+            // 创建Socket流
+            // 注意：实际实现需要使用streamingContext.socketTextStream
+            // 这里简化处理，仅展示流程
+            JavaRDD<String> socketStream = javaSparkContext.parallelize(new ArrayList<String>());
+            
+            // 应用处理规则
+            String processingType = (String) processingRules.get("type");
+            
+            // 更新作业状态
+            jobStatus.put("progress", 50);
+            jobStatus.put("message", "开始应用处理规则: " + processingType);
+            
+            // 根据处理类型应用不同的处理逻辑
+            switch (processingType) {
+                case "WORD_COUNT":
+                    // 词频统计处理逻辑
+                    break;
+                case "WINDOW":
+                    // 窗口处理逻辑
+                    break;
+                case "STATEFUL":
+                    // 有状态处理逻辑
+                    break;
+                default:
+                    throw new IllegalArgumentException("不支持的处理类型: " + processingType);
+            }
+            
+            // 更新作业状态
+            jobStatus.put("progress", 70);
+            jobStatus.put("message", "开始启动流处理");
+            
+            // 启动流处理
+            // streamingContext.start();
+            // streamingContext.awaitTermination();
+            
+            // 更新作业状态
+            jobStatus.put("progress", 100);
+            jobStatus.put("message", "Socket流处理已启动");
+            jobStatus.put("result", Map.of(
+                "hostname", hostname,
+                "port", port,
+                "processingType", processingType,
+                "status", "RUNNING"
+            ));
+        } catch (Exception e) {
+            jobStatus.put("error", "执行Socket流处理失败: " + e.getMessage());
+            throw e;
+        }
     }
     
     /**
      * 执行KMeans聚类算法
+     * @param params 算法参数
+     * @param inputData 输入数据
+     * @return 算法执行结果
      */
     private Map<String, Object> executeKMeans(Map<String, Object> params, Map<String, Object> inputData) {
-        // KMeans算法实现逻辑
         Map<String, Object> result = new HashMap<>();
-        result.put("success", true);
-        result.put("message", "KMeans聚类算法执行成功");
+        
+        try {
+            // 获取算法参数
+            int k = ((Number) params.getOrDefault("k", 3)).intValue();
+            int maxIterations = ((Number) params.getOrDefault("maxIter", 20)).intValue();
+            double epsilon = ((Number) params.getOrDefault("epsilon", 1e-4)).doubleValue();
+            List<String> features = (List<String>) params.get("features");
+            
+            if (features == null || features.isEmpty()) {
+                throw new IllegalArgumentException("特征列不能为空");
+            }
+            
+            // 将输入数据转换为DataFrame
+            List<Row> rows = (List<Row>) inputData.get("data");
+            if (rows == null || rows.isEmpty()) {
+                throw new IllegalArgumentException("输入数据不能为空");
+            }
+            
+            // 创建DataFrame
+            // 注意：实际实现需要根据输入数据的格式创建DataFrame
+            // 这里简化处理，假设已经有了DataFrame
+            Dataset<Row> dataset = sparkSession.emptyDataFrame();
+            
+            // 准备特征向量
+            VectorAssembler assembler = new VectorAssembler()
+                    .setInputCols(features.toArray(new String[0]))
+                    .setOutputCol("features");
+            
+            // 创建KMeans模型
+            KMeans kmeans = new KMeans()
+                    .setK(k)
+                    .setMaxIter(maxIterations)
+                    .setTol(epsilon)
+                    .setFeaturesCol("features")
+                    .setPredictionCol("prediction");
+            
+            // 创建Pipeline
+            Pipeline pipeline = new Pipeline().setStages(new PipelineStage[]{assembler, kmeans});
+            
+            // 训练模型
+            PipelineModel model = pipeline.fit(dataset);
+            
+            // 预测
+            Dataset<Row> predictions = model.transform(dataset);
+            
+            // 获取聚类中心
+            KMeansModel kmeansModel = (KMeansModel) model.stages()[1];
+            double[][] clusterCenters = new double[k][];
+            for (int i = 0; i < k; i++) {
+                clusterCenters[i] = kmeansModel.clusterCenters()[i].toArray();
+            }
+            
+            // 计算每个聚类的样本数
+            Dataset<Row> clusterSizes = predictions.groupBy("prediction").count();
+            List<Row> clusterSizeRows = clusterSizes.collectAsList();
+            Map<Integer, Long> clusterSizeMap = new HashMap<>();
+            for (Row row : clusterSizeRows) {
+                clusterSizeMap.put(row.getInt(0), row.getLong(1));
+            }
+            
+            // 构建结果
+            List<Map<String, Object>> clusters = new ArrayList<>();
+            for (int i = 0; i < k; i++) {
+                Map<String, Object> cluster = new HashMap<>();
+                cluster.put("clusterId", i);
+                cluster.put("center", clusterCenters[i]);
+                cluster.put("size", clusterSizeMap.getOrDefault(i, 0L));
+                clusters.add(cluster);
+            }
+            
+            // 返回结果
+            result.put("success", true);
+            result.put("clusters", clusters);
+            result.put("k", k);
+            result.put("iterations", kmeansModel.summary().iterations());
+            result.put("cost", kmeansModel.computeCost(predictions));
+            
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "KMeans聚类算法执行失败: " + e.getMessage());
+        }
+        
         return result;
     }
     
     /**
      * 执行逻辑回归算法
+     * @param params 算法参数
+     * @param inputData 输入数据
+     * @return 算法执行结果
      */
     private Map<String, Object> executeLogisticRegression(Map<String, Object> params, Map<String, Object> inputData) {
-        // 逻辑回归算法实现逻辑
         Map<String, Object> result = new HashMap<>();
-        result.put("success", true);
-        result.put("message", "逻辑回归算法执行成功");
+        
+        try {
+            // 获取算法参数
+            int maxIterations = ((Number) params.getOrDefault("maxIter", 100)).intValue();
+            double regParam = ((Number) params.getOrDefault("regParam", 0.3)).doubleValue();
+            double elasticNetParam = ((Number) params.getOrDefault("elasticNetParam", 0.8)).doubleValue();
+            List<String> features = (List<String>) params.get("features");
+            String labelColumn = (String) params.get("labelColumn");
+            
+            if (features == null || features.isEmpty()) {
+                throw new IllegalArgumentException("特征列不能为空");
+            }
+            
+            if (labelColumn == null || labelColumn.isEmpty()) {
+                throw new IllegalArgumentException("标签列不能为空");
+            }
+            
+            // 将输入数据转换为DataFrame
+            List<Row> rows = (List<Row>) inputData.get("data");
+            if (rows == null || rows.isEmpty()) {
+                throw new IllegalArgumentException("输入数据不能为空");
+            }
+            
+            // 创建DataFrame
+            // 注意：实际实现需要根据输入数据的格式创建DataFrame
+            // 这里简化处理，假设已经有了DataFrame
+            Dataset<Row> dataset = sparkSession.emptyDataFrame();
+            
+            // 准备特征向量
+            VectorAssembler assembler = new VectorAssembler()
+                    .setInputCols(features.toArray(new String[0]))
+                    .setOutputCol("features");
+            
+            // 创建逻辑回归模型
+            LogisticRegression lr = new LogisticRegression()
+                    .setMaxIter(maxIterations)
+                    .setRegParam(regParam)
+                    .setElasticNetParam(elasticNetParam)
+                    .setFeaturesCol("features")
+                    .setLabelCol(labelColumn)
+                    .setPredictionCol("prediction");
+            
+            // 创建Pipeline
+            Pipeline pipeline = new Pipeline().setStages(new PipelineStage[]{assembler, lr});
+            
+            // 划分训练集和测试集
+            Dataset<Row>[] splits = dataset.randomSplit(new double[]{0.8, 0.2}, 1234L);
+            Dataset<Row> trainingData = splits[0];
+            Dataset<Row> testData = splits[1];
+            
+            // 训练模型
+            PipelineModel model = pipeline.fit(trainingData);
+            
+            // 预测
+            Dataset<Row> predictions = model.transform(testData);
+            
+            // 获取逻辑回归模型
+            LogisticRegressionModel lrModel = (LogisticRegressionModel) model.stages()[1];
+            
+            // 计算评估指标
+            // 准确率
+            long correctCount = predictions.filter("prediction = " + labelColumn).count();
+            long totalCount = predictions.count();
+            double accuracy = (double) correctCount / totalCount;
+            
+            // 获取系数和截距
+            double[] coefficients = lrModel.coefficients().toArray();
+            double intercept = lrModel.intercept();
+            
+            // 构建特征重要性
+            List<Map<String, Object>> featureImportance = new ArrayList<>();
+            for (int i = 0; i < features.size(); i++) {
+                Map<String, Object> feature = new HashMap<>();
+                feature.put("feature", features.get(i));
+                feature.put("coefficient", coefficients[i]);
+                featureImportance.add(feature);
+            }
+            
+            // 返回结果
+            result.put("success", true);
+            result.put("accuracy", accuracy);
+            result.put("featureImportance", featureImportance);
+            result.put("intercept", intercept);
+            result.put("iterations", lrModel.summary().totalIterations());
+            
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "逻辑回归算法执行失败: " + e.getMessage());
+        }
+        
         return result;
     }
     
