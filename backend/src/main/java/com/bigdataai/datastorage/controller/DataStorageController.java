@@ -236,7 +236,7 @@ public class DataStorageController {
             Map<String, Object> document = (Map<String, Object>) requestBody.get("document");
             String id = (String) requestBody.get("id");
             
-            boolean success = dataStorageService.indexElasticsearchDocument(indexName, document, id);
+            boolean success = dataStorageService.indexToElasticsearch(indexName, id, document);
             
             if (success) {
                 result.put("success", true);

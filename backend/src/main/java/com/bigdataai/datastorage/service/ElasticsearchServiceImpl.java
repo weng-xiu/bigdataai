@@ -280,17 +280,38 @@ public class ElasticsearchServiceImpl implements ElasticsearchService {
     @Override
     public Map<String, Object> getIndexStats(String indexName) {
         try {
-            IndicesStatsRequest request = new IndicesStatsRequest();
-            request.indices(indexName);
+            Request request = new Request("GET", "/_stats");
+            Response response = elasticsearchClient.getLowLevelClient().performRequest(request);
             
-            IndicesStatsResponse response = elasticsearchClient.indices().stats(request, RequestOptions.DEFAULT);
+            // 解析响应获取索引统计信息
+            Map<String, Object> responseMap = objectMapper.readValue(response.getEntity().getContent(), Map.class);
+            Map<String, Object> indices = (Map<String, Object>) responseMap.get("indices");
+            
+            // 获取索引统计信息
+            long documentCount = 0;
+            long storeSize = 0;
+            
+            if (indices != null) {
+                for (Object indexStats : indices.values()) {
+                    Map<String, Object> stats = (Map<String, Object>) indexStats;
+                    Map<String, Object> total = (Map<String, Object>) stats.get("total");
+                    if (total != null) {
+                        Map<String, Object> docs = (Map<String, Object>) total.get("docs");
+                        Map<String, Object> store = (Map<String, Object>) total.get("store");
+                        if (docs != null && docs.containsKey("count")) {
+                            documentCount += ((Number) docs.get("count")).longValue();
+                        }
+                        if (store != null && store.containsKey("size_in_bytes")) {
+                            storeSize += ((Number) store.get("size_in_bytes")).longValue();
+                        }
+                    }
+                }
+            }
             
             Map<String, Object> stats = new HashMap<>();
-            stats.put("documentCount", response.getTotal().getDocs().getCount());
-            stats.put("documentDeleted", response.getTotal().getDocs().getDeleted());
-            stats.put("storeSize", response.getTotal().getStore().getSizeInBytes());
-            stats.put("indexCount", response.getIndices().size());
-            stats.put("totalShards", response.getTotal().getShards().getTotal());
+            stats.put("documentCount", documentCount);
+            stats.put("storeSize", storeSize);
+            stats.put("indexCount", indices != null ? indices.size() : 0);
             
             return stats;
         } catch (IOException e) {

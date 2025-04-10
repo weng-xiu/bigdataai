@@ -332,8 +332,8 @@ public class DataAnalysisServiceImpl implements DataAnalysisService {
         try {
             switch (dataSource.getType()) {
                 case MYSQL:
-                case POSTGRESQL:
-                case ORACLE:
+                case MONGODB:
+                case KAFKA:
                     return sparkSession.read()
                             .format("jdbc")
                             .option("url", dataSource.getConnectionUrl())
@@ -359,6 +359,8 @@ public class DataAnalysisServiceImpl implements DataAnalysisService {
                 case HBASE:
                     // HBase需要特殊处理，这里简化实现
                     throw new UnsupportedOperationException("HBase数据源加载暂未实现");
+                case FILE_SYSTEM:
+                case API:
                 default:
                     throw new IllegalArgumentException("不支持的数据源类型: " + dataSource.getType());
             }

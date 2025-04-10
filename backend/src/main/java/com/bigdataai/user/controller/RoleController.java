@@ -44,9 +44,17 @@ public class RoleController {
      * @return 角色列表
      */
     @GetMapping
-    public ResponseEntity<List<Role>> getAllRoles() {
-        List<Role> roles = roleService.findAll();
-        return ResponseEntity.ok(roles);
+    public ResponseEntity<List<Map<String, String>>> getAllRoles() {
+        return ResponseEntity.ok(roleService.findAll().stream()
+                .map(role -> {
+                    Map<String, String> roleMap = new HashMap<>();
+                    roleMap.put("id", role.getId().toString());
+                    roleMap.put("name", role.getName());
+                    roleMap.put("code", role.getCode());
+                    roleMap.put("description", role.getDescription());
+                    return roleMap;
+                })
+                .collect(Collectors.toList()));
     }
 
     /**
