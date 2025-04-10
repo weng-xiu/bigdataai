@@ -31,6 +31,7 @@ import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.elasticsearch.rest.RestStatus;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -280,38 +281,28 @@ public class ElasticsearchServiceImpl implements ElasticsearchService {
     @Override
     public Map<String, Object> getIndexStats(String indexName) {
         try {
-            Request request = new Request("GET", "/_stats");
-            Response response = elasticsearchClient.getLowLevelClient().performRequest(request);
+            IndicesStatsRequest request = new IndicesStatsRequest();
+            if (indexName != null && !indexName.isEmpty() && !"*".equals(indexName)) {
+                request.indices(indexName);
+            }
             
-            // 解析响应获取索引统计信息
-            Map<String, Object> responseMap = objectMapper.readValue(response.getEntity().getContent(), Map.class);
-            Map<String, Object> indices = (Map<String, Object>) responseMap.get("indices");
+            IndicesStatsResponse response = elasticsearchClient.indices().stats(request, RequestOptions.DEFAULT);
             
             // 获取索引统计信息
             long documentCount = 0;
             long storeSize = 0;
+            int indexCount = 0;
             
-            if (indices != null) {
-                for (Object indexStats : indices.values()) {
-                    Map<String, Object> stats = (Map<String, Object>) indexStats;
-                    Map<String, Object> total = (Map<String, Object>) stats.get("total");
-                    if (total != null) {
-                        Map<String, Object> docs = (Map<String, Object>) total.get("docs");
-                        Map<String, Object> store = (Map<String, Object>) total.get("store");
-                        if (docs != null && docs.containsKey("count")) {
-                            documentCount += ((Number) docs.get("count")).longValue();
-                        }
-                        if (store != null && store.containsKey("size_in_bytes")) {
-                            storeSize += ((Number) store.get("size_in_bytes")).longValue();
-                        }
-                    }
-                }
+            if (response.getStatus() == RestStatus.OK) {
+                documentCount = response.getTotal().getDocs().getCount();
+                storeSize = response.getTotal().getStore().getSizeInBytes();
+                indexCount = response.getIndices().size();
             }
             
             Map<String, Object> stats = new HashMap<>();
             stats.put("documentCount", documentCount);
             stats.put("storeSize", storeSize);
-            stats.put("indexCount", indices != null ? indices.size() : 0);
+            stats.put("indexCount", indexCount);
             
             return stats;
         } catch (IOException e) {
