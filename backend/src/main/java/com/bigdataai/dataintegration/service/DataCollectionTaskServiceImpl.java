@@ -23,7 +23,7 @@ import java.util.concurrent.ScheduledFuture;
 public class DataCollectionTaskServiceImpl implements DataCollectionTaskService {
 
     @Autowired
-    private DataCollectionTaskMapper taskRepository;
+    private DataCollectionTaskMapper taskMapper;
     
     @Autowired
     private DataSourceService dataSourceService;
@@ -50,15 +50,18 @@ public class DataCollectionTaskServiceImpl implements DataCollectionTaskService 
         // 设置初始状态
         task.setStatus("PENDING");
         
-        return taskRepository.save(task);
+        taskMapper.insert(task);
+        return task;
     }
 
     @Override
     @Transactional
     public DataCollectionTask updateTask(DataCollectionTask task) {
         // 检查任务是否存在
-        DataCollectionTask existingTask = taskRepository.findById(task.getId())
-                .orElseThrow(() -> new IllegalArgumentException("任务不存在"));
+        DataCollectionTask existingTask = taskMapper.selectById(task.getId());
+        if (existingTask == null) {
+            throw new IllegalArgumentException("任务不存在");
+        }
         
         // 更新任务
         existingTask.setName(task.getName());
@@ -72,14 +75,15 @@ public class DataCollectionTaskServiceImpl implements DataCollectionTaskService 
         existingTask.setEnabled(task.getEnabled());
         existingTask.setUpdateTime(new Date());
         
-        return taskRepository.save(existingTask);
+        taskMapper.updateById(existingTask);
+        return existingTask;
     }
 
     @Override
     @Transactional
     public void deleteTask(Long taskId) {
         // 检查任务是否存在
-        if (!taskRepository.existsById(taskId)) {
+        if (taskMapper.selectById(taskId) == null) {
             throw new IllegalArgumentException("任务不存在");
         }
         
@@ -87,27 +91,35 @@ public class DataCollectionTaskServiceImpl implements DataCollectionTaskService 
         cancelTaskSchedule(taskId);
         
         // 删除任务
-        taskRepository.deleteById(taskId);
+        taskMapper.deleteById(taskId);
     }
 
     @Override
     public DataCollectionTask getTask(Long taskId) {
-        return taskRepository.findById(taskId)
-                .orElseThrow(() -> new IllegalArgumentException("任务不存在"));
+        DataCollectionTask task = taskMapper.selectById(taskId);
+        if (task == null) {
+            throw new IllegalArgumentException("任务不存在");
+        }
+        return task;
     }
 
     @Override
     public List<DataCollectionTask> getAllTasks() {
-        return taskRepository.findAll();
+        return taskMapper.selectList(null);
     }
 
     @Override
     public List<DataCollectionTask> getTasksByDataSource(Long dataSourceId) {
         // 检查数据源是否存在
-        DataSource dataSource = dataSourceService.getDataSourceById(dataSourceId)
-                .orElseThrow(() -> new IllegalArgumentException("数据源不存在"));
+        DataSource dataSource = dataSourceService.getDataSource(dataSourceId);
+        if (dataSource == null) {
+            throw new IllegalArgumentException("数据源不存在");
+        }
         
-        return taskRepository.findByDataSource(dataSource);
+        // 使用LambdaQueryWrapper查询
+        LambdaQueryWrapper<DataCollectionTask> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(DataCollectionTask::getDataSourceId, dataSourceId);
+        return taskMapper.selectList(queryWrapper);
     }
 
     @Override
@@ -123,7 +135,7 @@ public class DataCollectionTaskServiceImpl implements DataCollectionTaskService 
         // 更新任务状态
         task.setStatus("RUNNING");
         task.setLastExecutionTime(new Date());
-        taskRepository.save(task);
+        taskMapper.updateById(task);
         
         // 初始化任务状态
         Map<String, Object> status = new HashMap<>();
@@ -197,7 +209,7 @@ public class DataCollectionTaskServiceImpl implements DataCollectionTaskService 
             
             // 更新任务
             task.setStatus("COMPLETED");
-            taskRepository.save(task);
+            taskMapper.updateById(task);
             
             return status;
         } catch (Exception e) {
@@ -209,7 +221,7 @@ public class DataCollectionTaskServiceImpl implements DataCollectionTaskService 
             
             // 更新任务
             task.setStatus("FAILED");
-            taskRepository.save(task);
+            taskMapper.updateById(task);
             
             return status;
         }

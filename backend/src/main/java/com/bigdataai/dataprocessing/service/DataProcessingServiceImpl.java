@@ -8,7 +8,9 @@ import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineModel;
 import org.apache.spark.ml.PipelineStage;
 import org.apache.spark.ml.classification.LogisticRegression;
+import org.apache.spark.ml.classification.LogisticRegressionModel;
 import org.apache.spark.ml.clustering.KMeans;
+import org.apache.spark.ml.clustering.KMeansModel;
 import org.apache.spark.ml.feature.VectorAssembler;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
@@ -1232,10 +1234,68 @@ public class DataProcessingServiceImpl implements DataProcessingService {
     
     /**
      * 加载数据集
+     * @param dataSource 数据源
+     * @param tableName 表名/集合名
+     * @return 数据集
      */
     private Dataset<Row> loadDataset(DataSource dataSource, String tableName) {
-        // 数据集加载逻辑
-        return sparkSession.emptyDataFrame();
+        try {
+            switch (dataSource.getType()) {
+                case MYSQL:
+                case POSTGRESQL:
+                case ORACLE:
+                    return sparkSession.read()
+                            .format("jdbc")
+                            .option("url", dataSource.getConnectionUrl())
+                            .option("dbtable", tableName)
+                            .option("user", dataSource.getUsername())
+                            .option("password", dataSource.getPassword())
+                            .load();
+                case MONGODB:
+                    return sparkSession.read()
+                            .format("mongo")
+                            .option("uri", dataSource.getConnectionUrl())
+                            .option("database", dataSource.getProperties().get("database"))
+                            .option("collection", tableName)
+                            .load();
+                case ELASTICSEARCH:
+                    return sparkSession.read()
+                            .format("org.elasticsearch.spark.sql")
+                            .option("es.nodes", dataSource.getConnectionUrl())
+                            .option("es.port", dataSource.getProperties().get("port"))
+                            .option("es.resource", tableName)
+                            .load();
+                case HDFS:
+                    String format = dataSource.getProperties().get("format");
+                    if (format == null) {
+                        format = "parquet"; // 默认格式
+                    }
+                    return sparkSession.read()
+                            .format(format)
+                            .load(dataSource.getConnectionUrl() + "/" + tableName);
+                case HBASE:
+                    // HBase需要特殊处理，这里简化实现
+                    return sparkSession.emptyDataFrame();
+                case KAFKA:
+                    // Kafka需要特殊处理，这里简化实现
+                    return sparkSession.emptyDataFrame();
+                case FILE_SYSTEM:
+                    format = dataSource.getProperties().get("format");
+                    if (format == null) {
+                        format = "csv"; // 默认格式
+                    }
+                    return sparkSession.read()
+                            .format(format)
+                            .option("header", "true")
+                            .option("inferSchema", "true")
+                            .load(dataSource.getConnectionUrl() + "/" + tableName);
+                default:
+                    return sparkSession.emptyDataFrame();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return sparkSession.emptyDataFrame();
+        }
     }
     
     /**
