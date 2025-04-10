@@ -57,7 +57,7 @@ public class RoleController {
     @GetMapping("/{id}")
     public ResponseEntity<?> getRoleById(@PathVariable Long id) {
         Optional<Role> role = roleService.findById(id);
-        return role.map(ResponseEntity::ok)
+        return role.map(r -> ResponseEntity.ok(r))
                 .orElseGet(() -> {
                     Map<String, String> response = new HashMap<>();
                     response.put("message", "角色不存在");

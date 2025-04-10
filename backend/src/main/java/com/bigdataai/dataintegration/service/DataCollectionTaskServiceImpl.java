@@ -150,7 +150,7 @@ public class DataCollectionTaskServiceImpl implements DataCollectionTaskService 
         
         try {
             // 根据数据源类型和任务类型执行不同的数据采集操作
-            DataSource dataSource = task.getDataSource();
+            DataSource dataSource = dataSourceService.getDataSource(task.getDataSourceId());
             String sourceTable = task.getSourceTable();
             String targetPath = task.getTargetPath();
             String queryCondition = task.getQueryCondition();
@@ -190,11 +190,21 @@ public class DataCollectionTaskServiceImpl implements DataCollectionTaskService 
                     count = dataCollectorService.collectFromElasticsearch(dataSource, sourceTable, queryCondition);
                     break;
                 case HBASE:
-                    count = dataCollectorService.collectFromHBase(dataSource, sourceTable, conditions);
+                    // 从properties中获取必要的HBase参数
+                    String familyName = properties.getOrDefault("familyName", "default");
+                    String startRow = properties.getOrDefault("startRow", "");
+                    String endRow = properties.getOrDefault("endRow", "");
+                    count = dataCollectorService.collectFromHBase(dataSource, sourceTable, familyName, startRow, endRow);
                     break;
                 case API:
-                    String apiMethod = properties.getOrDefault("method", "GET");
-                    count = dataCollectorService.collectFromAPI(dataSource, sourceTable, apiMethod, conditions);
+                    // 将conditions转换为String类型的Map
+                    Map<String, String> apiParams = new HashMap<>();
+                    if (conditions != null) {
+                        for (Map.Entry<String, Object> entry : conditions.entrySet()) {
+                            apiParams.put(entry.getKey(), entry.getValue() != null ? entry.getValue().toString() : null);
+                        }
+                    }
+                    count = dataCollectorService.collectFromAPI(dataSource, sourceTable, apiParams);
                     break;
                 default:
                     throw new IllegalArgumentException("不支持的数据源类型: " + sourceType);

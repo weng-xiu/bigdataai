@@ -43,7 +43,7 @@ public class DataAnalysisServiceImpl implements DataAnalysisService {
 
         try {
             // 获取数据源
-            DataSource dataSource = dataSourceService.getDataSourceById(dataSourceId);
+            DataSource dataSource = dataSourceService.getDataSource(dataSourceId);
             if (dataSource == null) {
                 result.put("success", false);
                 result.put("message", "数据源不存在");
@@ -97,7 +97,7 @@ public class DataAnalysisServiceImpl implements DataAnalysisService {
 
         try {
             // 获取主数据源
-            DataSource primaryDataSource = dataSourceService.getDataSourceById(primaryDataSourceId);
+            DataSource primaryDataSource = dataSourceService.getDataSource(primaryDataSourceId);
             if (primaryDataSource == null) {
                 result.put("success", false);
                 result.put("message", "主数据源不存在");
@@ -105,7 +105,7 @@ public class DataAnalysisServiceImpl implements DataAnalysisService {
             }
 
             // 获取关联数据源
-            DataSource joinDataSource = dataSourceService.getDataSourceById(joinDataSourceId);
+            DataSource joinDataSource = dataSourceService.getDataSource(joinDataSourceId);
             if (joinDataSource == null) {
                 result.put("success", false);
                 result.put("message", "关联数据源不存在");
@@ -169,6 +169,162 @@ public class DataAnalysisServiceImpl implements DataAnalysisService {
             result.put("message", "执行关联分析失败: " + e.getMessage());
         }
 
+        return result;
+    }
+    
+    @Override
+    public Map<String, Object> executeStatisticalAnalysis(Long dataSourceId, String tableName, 
+                                                 List<String> groupByFields, Map<String, String> aggregations) {
+        // 实现统计分析的逻辑
+        Map<String, Object> result = new HashMap<>();
+        // TODO: 实现统计分析
+        return result;
+    }
+    
+    @Override
+    public Map<String, Object> executeTimeSeriesAnalysis(Long dataSourceId, String tableName,
+                                                String timeField, String valueField,
+                                                String interval, String aggregateFunction) {
+        // 实现时间序列分析的逻辑
+        Map<String, Object> result = new HashMap<>();
+        // TODO: 实现时间序列分析
+        return result;
+    }
+    
+    @Override
+    public Map<String, Object> executeCorrelationAnalysis(Long dataSourceId, String tableName, List<String> fields) {
+        // 实现相关性分析的逻辑
+        Map<String, Object> result = new HashMap<>();
+        // TODO: 实现相关性分析
+        return result;
+    }
+    
+    @Override
+    public Map<String, Object> executePredictiveAnalysis(Long dataSourceId, String tableName,
+                                                List<String> features, String target,
+                                                String algorithm, Map<String, Object> params) {
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // 获取数据源
+            DataSource dataSource = dataSourceService.getDataSource(dataSourceId);
+            if (dataSource == null) {
+                result.put("success", false);
+                result.put("message", "数据源不存在");
+                return result;
+            }
+            
+            // 加载数据集
+            Dataset<Row> dataset = loadDatasetFromSource(dataSource);
+            if (dataset == null) {
+                result.put("success", false);
+                result.put("message", "无法加载数据集");
+                return result;
+            }
+            
+            // 准备特征向量
+            VectorAssembler assembler = new VectorAssembler()
+                    .setInputCols(features.toArray(new String[0]))
+                    .setOutputCol("features");
+            
+            // 根据算法类型执行不同的预测分析
+            switch (algorithm) {
+                case "linear_regression":
+                    // 线性回归
+                    LinearRegression lr = new LinearRegression()
+                            .setFeaturesCol("features")
+                            .setLabelCol(target);
+                    
+                    // 设置参数
+                    if (params != null) {
+                        if (params.containsKey("maxIter")) {
+                            lr.setMaxIter(Integer.parseInt(params.get("maxIter").toString()));
+                        }
+                        if (params.containsKey("regParam")) {
+                            lr.setRegParam(Double.parseDouble(params.get("regParam").toString()));
+                        }
+                    }
+                    
+                    // 创建Pipeline
+                    Pipeline pipeline = new Pipeline().setStages(new PipelineStage[] {assembler, lr});
+                    
+                    // 拆分训练集和测试集
+                    Dataset<Row>[] splits = dataset.randomSplit(new double[] {0.8, 0.2}, 1234L);
+                    Dataset<Row> trainingData = splits[0];
+                    Dataset<Row> testData = splits[1];
+                    
+                    // 训练模型
+                    PipelineModel model = pipeline.fit(trainingData);
+                    
+                    // 预测
+                    Dataset<Row> predictions = model.transform(testData);
+                    
+                    // 评估模型
+                    double rmse = predictions.select(functions.sqrt(functions.mean(functions.col("prediction").minus(functions.col(target)).multiply(functions.col("prediction").minus(functions.col(target)))))).collectAsList().get(0).getDouble(0);
+                    
+                    result.put("success", true);
+                    result.put("algorithm", "linear_regression");
+                    result.put("rmse", rmse);
+                    result.put("model", "线性回归模型");
+                    break;
+                    
+                case "random_forest":
+                    // 随机森林分类
+                    StringIndexer labelIndexer = new StringIndexer()
+                            .setInputCol(target)
+                            .setOutputCol("indexedLabel");
+                    
+                    RandomForestClassifier rf = new RandomForestClassifier()
+                            .setLabelCol("indexedLabel")
+                            .setFeaturesCol("features");
+                    
+                    // 设置参数
+                    if (params != null) {
+                        if (params.containsKey("numTrees")) {
+                            rf.setNumTrees(Integer.parseInt(params.get("numTrees").toString()));
+                        }
+                        if (params.containsKey("maxDepth")) {
+                            rf.setMaxDepth(Integer.parseInt(params.get("maxDepth").toString()));
+                        }
+                    }
+                    
+                    // 创建Pipeline
+                    Pipeline rfPipeline = new Pipeline().setStages(new PipelineStage[] {labelIndexer, assembler, rf});
+                    
+                    // 拆分训练集和测试集
+                    Dataset<Row>[] rfSplits = dataset.randomSplit(new double[] {0.8, 0.2}, 1234L);
+                    Dataset<Row> rfTrainingData = rfSplits[0];
+                    Dataset<Row> rfTestData = rfSplits[1];
+                    
+                    // 训练模型
+                    PipelineModel rfModel = rfPipeline.fit(rfTrainingData);
+                    
+                    // 预测
+                    Dataset<Row> rfPredictions = rfModel.transform(rfTestData);
+                    
+                    // 评估模型
+                    MulticlassClassificationEvaluator evaluator = new MulticlassClassificationEvaluator()
+                            .setLabelCol("indexedLabel")
+                            .setPredictionCol("prediction")
+                            .setMetricName("accuracy");
+                    double accuracy = evaluator.evaluate(rfPredictions);
+                    
+                    result.put("success", true);
+                    result.put("algorithm", "random_forest");
+                    result.put("accuracy", accuracy);
+                    result.put("model", "随机森林分类模型");
+                    break;
+                    
+                default:
+                    result.put("success", false);
+                    result.put("message", "不支持的算法类型: " + algorithm);
+            }
+            
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "执行预测分析失败: " + e.getMessage());
+        }
+        
         return result;
     }
     

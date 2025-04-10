@@ -81,7 +81,7 @@ public class UserController {
     @PreAuthorize("hasAuthority('USER_READ')")
     public ResponseEntity<?> getUserById(@PathVariable Long id) {
         Optional<User> user = userService.findById(id);
-        return user.map(ResponseEntity::ok)
+        return user.map(u -> ResponseEntity.ok(u))
                 .orElseGet(() -> {
                     Map<String, String> response = new HashMap<>();
                     response.put("message", "用户不存在");
