@@ -81,7 +81,15 @@ public class UserController {
     @PreAuthorize("hasAuthority('USER_READ')")
     public ResponseEntity<?> getUserById(@PathVariable Long id) {
         Optional<User> user = userService.findById(id);
-        return user.map(u -> ResponseEntity.ok(u))
+        return user.map(u -> {
+                    Map<String, String> userMap = new HashMap<>();
+                    userMap.put("id", u.getId().toString());
+                    userMap.put("username", u.getUsername());
+                    userMap.put("email", u.getEmail());
+                    userMap.put("phone", u.getPhone());
+                    userMap.put("fullName", u.getFullName());
+                    return ResponseEntity.ok(userMap);
+                })
                 .orElseGet(() -> {
                     Map<String, String> response = new HashMap<>();
                     response.put("message", "用户不存在");

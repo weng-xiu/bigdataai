@@ -281,23 +281,26 @@ public class ElasticsearchServiceImpl implements ElasticsearchService {
     @Override
     public Map<String, Object> getIndexStats(String indexName) {
         try {
-            IndicesStatsRequest request = new IndicesStatsRequest();
+            // 使用搜索API获取文档计数
+            SearchRequest countRequest = new SearchRequest();
             if (indexName != null && !indexName.isEmpty() && !"*".equals(indexName)) {
-                request.indices(indexName);
+                countRequest.indices(indexName);
             }
             
-            IndicesStatsResponse response = elasticsearchClient.indices().stats(request, RequestOptions.DEFAULT);
+            SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+            sourceBuilder.query(QueryBuilders.matchAllQuery());
+            sourceBuilder.size(0); // 只获取计数，不获取文档内容
+            countRequest.source(sourceBuilder);
             
-            // 获取索引统计信息
-            long documentCount = 0;
-            long storeSize = 0;
-            int indexCount = 0;
+            SearchResponse countResponse = elasticsearchClient.search(countRequest, RequestOptions.DEFAULT);
+            long documentCount = countResponse.getHits().getTotalHits().value;
             
-            if (response.getStatus() == RestStatus.OK) {
-                documentCount = response.getTotal().getDocs().getCount();
-                storeSize = response.getTotal().getStore().getSizeInBytes();
-                indexCount = response.getIndices().size();
-            }
+            // 获取索引信息
+            List<String> indices = listIndices();
+            int indexCount = indices.size();
+            
+            // 由于无法直接获取存储大小，设置为-1
+            long storeSize = -1;
             
             Map<String, Object> stats = new HashMap<>();
             stats.put("documentCount", documentCount);

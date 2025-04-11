@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * 角色管理控制器
@@ -50,7 +51,7 @@ public class RoleController {
                     Map<String, String> roleMap = new HashMap<>();
                     roleMap.put("id", role.getId().toString());
                     roleMap.put("name", role.getName());
-                    roleMap.put("code", role.getCode());
+                    // Role类中没有getCode方法，移除此行
                     roleMap.put("description", role.getDescription());
                     return roleMap;
                 })
@@ -65,7 +66,13 @@ public class RoleController {
     @GetMapping("/{id}")
     public ResponseEntity<?> getRoleById(@PathVariable Long id) {
         Optional<Role> role = roleService.findById(id);
-        return role.map(r -> ResponseEntity.ok(r))
+        return role.map(r -> {
+                    Map<String, String> roleMap = new HashMap<>();
+                    roleMap.put("id", r.getId().toString());
+                    roleMap.put("name", r.getName());
+                    roleMap.put("description", r.getDescription());
+                    return ResponseEntity.ok(roleMap);
+                })
                 .orElseGet(() -> {
                     Map<String, String> response = new HashMap<>();
                     response.put("message", "角色不存在");

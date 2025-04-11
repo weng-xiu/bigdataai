@@ -660,11 +660,11 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             // 更新作业状态
             jobStatus.put("progress", 100);
             jobStatus.put("message", "ETL作业执行完成");
-            jobStatus.put("result", Map.of(
-                "rowCount", rowCount,
-                "sourceTable", sourceTable,
-                "targetTable", targetTable
-            ));
+            Map<String, Object> resultMap = new HashMap<>();
+            resultMap.put("rowCount", rowCount);
+            resultMap.put("sourceTable", sourceTable);
+            resultMap.put("targetTable", targetTable);
+            jobStatus.put("result", resultMap);
         } catch (Exception e) {
             jobStatus.put("error", "执行ETL作业失败: " + e.getMessage());
             throw e;
@@ -951,12 +951,12 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             // 更新作业状态
             jobStatus.put("progress", 100);
             jobStatus.put("message", "Kafka流处理已启动");
-            jobStatus.put("result", Map.of(
-                "topic", topic,
-                "bootstrapServers", bootstrapServers,
-                "processingType", processingType,
-                "status", "RUNNING"
-            ));
+            Map<String, String> resultMap = new HashMap<>();
+            resultMap.put("topic", topic);
+            resultMap.put("bootstrapServers", bootstrapServers);
+            resultMap.put("processingType", processingType);
+            resultMap.put("status", "RUNNING");
+            jobStatus.put("result", resultMap);
         } catch (Exception e) {
             jobStatus.put("error", "执行Kafka流处理失败: " + e.getMessage());
             throw e;
@@ -1026,12 +1026,12 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             // 更新作业状态
             jobStatus.put("progress", 100);
             jobStatus.put("message", "Socket流处理已启动");
-            jobStatus.put("result", Map.of(
-                "hostname", hostname,
-                "port", port,
-                "processingType", processingType,
-                "status", "RUNNING"
-            ));
+            Map<String, Object> resultMap = new HashMap<>();
+            resultMap.put("hostname", hostname);
+            resultMap.put("port", port);
+            resultMap.put("processingType", processingType);
+            resultMap.put("status", "RUNNING");
+            jobStatus.put("result", resultMap);
         } catch (Exception e) {
             jobStatus.put("error", "执行Socket流处理失败: " + e.getMessage());
             throw e;
