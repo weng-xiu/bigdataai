@@ -556,6 +556,10 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             // 获取作业类型
             String jobType = (String) jobConfig.get("jobType");
             
+            // 更新作业状态
+            jobStatus.put("progress", 0);
+            jobStatus.put("message", "开始执行" + jobType + "批处理作业");
+            
             // 根据作业类型执行不同的批处理逻辑
             switch (jobType) {
                 case "ETL":
@@ -566,11 +570,20 @@ public class DataProcessingServiceImpl implements DataProcessingService {
                     // 执行分析作业
                     executeAnalysisJob(jobConfig, jobStatus);
                     break;
+                case "ML":
+                    // 执行机器学习作业
+                    executeMLJob(jobConfig, jobStatus);
+                    break;
                 default:
                     jobStatus.put("error", "不支持的作业类型: " + jobType);
+                    jobStatus.put("progress", 100);
+                    jobStatus.put("status", "FAILED");
             }
         } catch (Exception e) {
+            e.printStackTrace();
             jobStatus.put("error", "执行批处理作业失败: " + e.getMessage());
+            jobStatus.put("progress", 100);
+            jobStatus.put("status", "FAILED");
         }
     }
     
@@ -584,6 +597,10 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             // 获取流处理类型
             String streamType = (String) streamConfig.get("streamType");
             
+            // 更新作业状态
+            jobStatus.put("progress", 0);
+            jobStatus.put("message", "开始执行" + streamType + "流处理作业");
+            
             // 根据流处理类型执行不同的流处理逻辑
             switch (streamType) {
                 case "KAFKA":
@@ -596,9 +613,14 @@ public class DataProcessingServiceImpl implements DataProcessingService {
                     break;
                 default:
                     jobStatus.put("error", "不支持的流处理类型: " + streamType);
+                    jobStatus.put("progress", 100);
+                    jobStatus.put("status", "FAILED");
             }
         } catch (Exception e) {
+            e.printStackTrace();
             jobStatus.put("error", "执行流处理作业失败: " + e.getMessage());
+            jobStatus.put("progress", 100);
+            jobStatus.put("status", "FAILED");
         }
     }
     
@@ -618,6 +640,7 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             // 更新作业状态
             jobStatus.put("progress", 10);
             jobStatus.put("message", "开始加载源数据");
+            jobStatus.put("status", "RUNNING");
             
             // 获取数据源
             DataSource dataSource = dataSourceService.getDataSource(sourceId);
@@ -654,20 +677,37 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             // 保存转换后的数据
             long rowCount = sourceData.count();
             
-            // 这里应该有保存数据的逻辑，根据实际情况实现
-            // 例如：sourceData.write().saveAsTable(targetTable);
+            // 保存数据到目标表
+            try {
+                // 根据目标表名决定保存方式
+                if (targetTable.contains(".")) {
+                    // 如果包含点，说明是指定了数据库和表名
+                    String[] parts = targetTable.split("\\.");
+                    sourceData.write().mode("overwrite").saveAsTable(targetTable);
+                } else {
+                    // 否则保存为临时表
+                    sourceData.createOrReplaceTempView(targetTable);
+                }
+            } catch (Exception e) {
+                throw new RuntimeException("保存数据到目标表失败: " + e.getMessage(), e);
+            }
             
             // 更新作业状态
             jobStatus.put("progress", 100);
             jobStatus.put("message", "ETL作业执行完成");
+            jobStatus.put("status", "COMPLETED");
+            
             Map<String, Object> resultMap = new HashMap<>();
             resultMap.put("rowCount", rowCount);
             resultMap.put("sourceTable", sourceTable);
             resultMap.put("targetTable", targetTable);
+            resultMap.put("sampleData", sourceData.limit(10).collectAsList());
             jobStatus.put("result", resultMap);
         } catch (Exception e) {
+            e.printStackTrace();
             jobStatus.put("error", "执行ETL作业失败: " + e.getMessage());
-            throw e;
+            jobStatus.put("progress", 100);
+            jobStatus.put("status", "FAILED");
         }
     }
     
@@ -687,6 +727,7 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             // 更新作业状态
             jobStatus.put("progress", 10);
             jobStatus.put("message", "开始加载数据");
+            jobStatus.put("status", "RUNNING");
             
             // 获取数据源
             DataSource dataSource = dataSourceService.getDataSource(dataSourceId);
@@ -727,10 +768,13 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             // 更新作业状态
             jobStatus.put("progress", 100);
             jobStatus.put("message", "分析作业执行完成");
+            jobStatus.put("status", "COMPLETED");
             jobStatus.put("result", analysisResult);
         } catch (Exception e) {
+            e.printStackTrace();
             jobStatus.put("error", "执行分析作业失败: " + e.getMessage());
-            throw e;
+            jobStatus.put("progress", 100);
+            jobStatus.put("status", "FAILED");
         }
     }
     
@@ -748,7 +792,8 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             List<String> columns = (List<String>) params.get("columns");
             
             // 计算基本统计信息
-            Dataset<Row> stats = dataset.select(columns.toArray(new String[0])).summary(
+            // 使用selectExpr代替select，因为select方法不接受String[]参数
+            Dataset<Row> stats = dataset.selectExpr(columns.toArray(new String[0])).summary(
                 "count", "mean", "stddev", "min", "max");
             
             // 转换为结果格式
@@ -896,6 +941,7 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             // 更新作业状态
             jobStatus.put("progress", 10);
             jobStatus.put("message", "开始初始化Kafka流处理");
+            jobStatus.put("status", "RUNNING");
             
             // 创建Streaming上下文
             JavaStreamingContext streamingContext = new JavaStreamingContext(
@@ -951,6 +997,7 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             // 更新作业状态
             jobStatus.put("progress", 100);
             jobStatus.put("message", "Kafka流处理已启动");
+            jobStatus.put("status", "COMPLETED");
             Map<String, String> resultMap = new HashMap<>();
             resultMap.put("topic", topic);
             resultMap.put("bootstrapServers", bootstrapServers);
@@ -958,8 +1005,10 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             resultMap.put("status", "RUNNING");
             jobStatus.put("result", resultMap);
         } catch (Exception e) {
+            e.printStackTrace();
             jobStatus.put("error", "执行Kafka流处理失败: " + e.getMessage());
-            throw e;
+            jobStatus.put("progress", 100);
+            jobStatus.put("status", "FAILED");
         }
     }
     
@@ -979,6 +1028,7 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             // 更新作业状态
             jobStatus.put("progress", 10);
             jobStatus.put("message", "开始初始化Socket流处理");
+            jobStatus.put("status", "RUNNING");
             
             // 创建Streaming上下文
             JavaStreamingContext streamingContext = new JavaStreamingContext(
@@ -1026,6 +1076,7 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             // 更新作业状态
             jobStatus.put("progress", 100);
             jobStatus.put("message", "Socket流处理已启动");
+            jobStatus.put("status", "COMPLETED");
             Map<String, Object> resultMap = new HashMap<>();
             resultMap.put("hostname", hostname);
             resultMap.put("port", port);
@@ -1033,8 +1084,75 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             resultMap.put("status", "RUNNING");
             jobStatus.put("result", resultMap);
         } catch (Exception e) {
+            e.printStackTrace();
             jobStatus.put("error", "执行Socket流处理失败: " + e.getMessage());
-            throw e;
+            jobStatus.put("progress", 100);
+            jobStatus.put("status", "FAILED");
+        }
+    }
+    
+    /**
+     * 执行机器学习作业
+     * @param jobConfig 作业配置
+     * @param jobStatus 作业状态
+     */
+    private void executeMLJob(Map<String, Object> jobConfig, Map<String, Object> jobStatus) {
+        try {
+            // 获取机器学习作业参数
+            String algorithm = (String) jobConfig.get("algorithm");
+            Long dataSourceId = ((Number) jobConfig.get("dataSourceId")).longValue();
+            String tableName = (String) jobConfig.get("tableName");
+            Map<String, Object> algorithmParams = (Map<String, Object>) jobConfig.get("algorithmParams");
+            
+            // 更新作业状态
+            jobStatus.put("progress", 10);
+            jobStatus.put("message", "开始加载数据");
+            jobStatus.put("status", "RUNNING");
+            
+            // 获取数据源
+            DataSource dataSource = dataSourceService.getDataSource(dataSourceId);
+            if (dataSource == null) {
+                throw new IllegalArgumentException("数据源不存在: " + dataSourceId);
+            }
+            
+            // 加载数据
+            Dataset<Row> dataset = loadDataset(dataSource, tableName);
+            if (dataset == null) {
+                throw new IllegalArgumentException("加载数据失败");
+            }
+            
+            // 更新作业状态
+            jobStatus.put("progress", 30);
+            jobStatus.put("message", "开始执行" + algorithm + "算法");
+            
+            // 准备输入数据
+            Map<String, Object> inputData = new HashMap<>();
+            inputData.put("dataset", dataset);
+            inputData.put("tableName", tableName);
+            
+            // 根据算法类型执行不同的机器学习算法
+            Map<String, Object> mlResult;
+            switch (algorithm.toLowerCase()) {
+                case "kmeans":
+                    mlResult = executeKMeans(algorithmParams, inputData);
+                    break;
+                case "logistic_regression":
+                    mlResult = executeLogisticRegression(algorithmParams, inputData);
+                    break;
+                default:
+                    throw new IllegalArgumentException("不支持的算法: " + algorithm);
+            }
+            
+            // 更新作业状态
+            jobStatus.put("progress", 100);
+            jobStatus.put("message", algorithm + "算法执行完成");
+            jobStatus.put("result", mlResult);
+            jobStatus.put("status", "COMPLETED");
+        } catch (Exception e) {
+            e.printStackTrace();
+            jobStatus.put("error", "执行机器学习作业失败: " + e.getMessage());
+            jobStatus.put("progress", 100);
+            jobStatus.put("status", "FAILED");
         }
     }
     
@@ -1058,16 +1176,24 @@ public class DataProcessingServiceImpl implements DataProcessingService {
                 throw new IllegalArgumentException("特征列不能为空");
             }
             
-            // 将输入数据转换为DataFrame
-            List<Row> rows = (List<Row>) inputData.get("data");
-            if (rows == null || rows.isEmpty()) {
-                throw new IllegalArgumentException("输入数据不能为空");
+            // 获取输入数据
+            Dataset<Row> dataset;
+            if (inputData.containsKey("dataset")) {
+                // 如果直接提供了Dataset对象
+                dataset = (Dataset<Row>) inputData.get("dataset");
+            } else if (inputData.containsKey("data")) {
+                // 如果提供了数据列表，需要转换为DataFrame
+                List<Row> rows = (List<Row>) inputData.get("data");
+                if (rows == null || rows.isEmpty()) {
+                    throw new IllegalArgumentException("输入数据不能为空");
+                }
+                
+                // 从第一行数据推断schema
+                // 注意：实际实现中应该有更健壮的schema推断逻辑
+                dataset = sparkSession.createDataFrame(rows, sparkSession.table((String) inputData.get("tableName")).schema());
+            } else {
+                throw new IllegalArgumentException("未提供有效的输入数据");
             }
-            
-            // 创建DataFrame
-            // 注意：实际实现需要根据输入数据的格式创建DataFrame
-            // 这里简化处理，假设已经有了DataFrame
-            Dataset<Row> dataset = sparkSession.emptyDataFrame();
             
             // 准备特征向量
             VectorAssembler assembler = new VectorAssembler()
@@ -1120,8 +1246,10 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             result.put("success", true);
             result.put("clusters", clusters);
             result.put("k", k);
-            result.put("iterations", kmeansModel.summary().iterations());
-            result.put("cost", kmeansModel.computeCost(predictions));
+            // 修复KMeansModel方法调用 - 使用兼容的方法
+            // 由于API兼容性问题，暂时注释掉这些统计信息
+            // result.put("iterations", kmeansModel.summary().iterations());
+            // result.put("cost", kmeansModel.computeCost(dataset));
             
         } catch (Exception e) {
             result.put("success", false);
@@ -1156,16 +1284,24 @@ public class DataProcessingServiceImpl implements DataProcessingService {
                 throw new IllegalArgumentException("标签列不能为空");
             }
             
-            // 将输入数据转换为DataFrame
-            List<Row> rows = (List<Row>) inputData.get("data");
-            if (rows == null || rows.isEmpty()) {
-                throw new IllegalArgumentException("输入数据不能为空");
+            // 获取输入数据
+            Dataset<Row> dataset;
+            if (inputData.containsKey("dataset")) {
+                // 如果直接提供了Dataset对象
+                dataset = (Dataset<Row>) inputData.get("dataset");
+            } else if (inputData.containsKey("data")) {
+                // 如果提供了数据列表，需要转换为DataFrame
+                List<Row> rows = (List<Row>) inputData.get("data");
+                if (rows == null || rows.isEmpty()) {
+                    throw new IllegalArgumentException("输入数据不能为空");
+                }
+                
+                // 从第一行数据推断schema
+                // 注意：实际实现中应该有更健壮的schema推断逻辑
+                dataset = sparkSession.createDataFrame(rows, sparkSession.table((String) inputData.get("tableName")).schema());
+            } else {
+                throw new IllegalArgumentException("未提供有效的输入数据");
             }
-            
-            // 创建DataFrame
-            // 注意：实际实现需要根据输入数据的格式创建DataFrame
-            // 这里简化处理，假设已经有了DataFrame
-            Dataset<Row> dataset = sparkSession.emptyDataFrame();
             
             // 准备特征向量
             VectorAssembler assembler = new VectorAssembler()
@@ -1242,8 +1378,6 @@ public class DataProcessingServiceImpl implements DataProcessingService {
         try {
             switch (dataSource.getType()) {
                 case MYSQL:
-                case POSTGRESQL:
-                case ORACLE:
                     return sparkSession.read()
                             .format("jdbc")
                             .option("url", dataSource.getConnectionUrl())
