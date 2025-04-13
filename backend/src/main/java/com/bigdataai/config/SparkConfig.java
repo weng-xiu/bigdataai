@@ -31,7 +31,9 @@ public class SparkConfig {
                 .setMaster(master)
                 .setAppName(appName)
                 .set("spark.executor.memory", executorMemory)
-                .set("spark.driver.memory", driverMemory);
+                .set("spark.driver.memory", driverMemory)
+                .set("spark.driver.extraLibraryPath", System.getenv("HADOOP_HOME") + "/bin")
+                .set("spark.executor.extraLibraryPath", System.getenv("HADOOP_HOME") + "/bin");
     }
 
     @Bean
