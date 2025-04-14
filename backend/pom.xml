@@ -194,8 +194,21 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <version>2.7.0</version>
+                <version>3.1.6</version>
                 <configuration>
+                    <jvmArguments>
+                        -Dspring.main.lazy-initialization=true
+                        -Dspring.config.location=classpath:/application.properties
+                    </jvmArguments>
+                    <arguments>
+                        <argument>-Dloader.path=lib/</argument>
+                    </arguments>
+                </configuration>
+                <configuration>
+                    <classpath>
+                        <layout>ZIP</layout>
+                        <useShortClasspath>true</useShortClasspath>
+                    </classpath>
                     <executable>true</executable>
                     <mainClass>com.bigdataai.BigDataApplication</mainClass>
                     <excludes>
@@ -226,7 +239,11 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
+                    <argLine>-Xmx1024m -Djdk.net.URLClassPath.disableClassPathURLCheck=true</argLine>
+                    <trimStackTrace>false</trimStackTrace>
                     <skipTests>false</skipTests>
+                    <classpathLayout>ZIP</classpathLayout>
+                    <useSystemClassLoader>false</useSystemClassLoader>
                 </configuration>
             </plugin>
             <plugin>
