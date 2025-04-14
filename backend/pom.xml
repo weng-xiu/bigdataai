@@ -203,11 +203,10 @@
                     <arguments>
                         <argument>-Dloader.path=lib/</argument>
                     </arguments>
-                </configuration>
-                <configuration>
                     <classpath>
                         <layout>ZIP</layout>
                         <useShortClasspath>true</useShortClasspath>
+                        <classpathLayout>ZIP</classpathLayout>
                     </classpath>
                     <executable>true</executable>
                     <mainClass>com.bigdataai.BigDataApplication</mainClass>
