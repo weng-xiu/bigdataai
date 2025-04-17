@@ -223,6 +223,30 @@ public class MonitoringServiceImpl implements MonitoringService {
 
         return result;
     }
+
+    @Override
+    public Map<String, Object> getSystemBasicInfo() {
+        Map<String, Object> info = new HashMap<>();
+        try {
+            // TODO: Replace with actual version retrieval (e.g., from build info or config)
+            info.put("version", "1.0.0-SNAPSHOT"); 
+            info.put("serverStatus", "running"); // Basic status
+            
+            // Optionally add more basic info if readily available
+            OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
+            info.put("osName", osBean.getName());
+            info.put("osVersion", osBean.getVersion());
+            info.put("osArch", osBean.getArch());
+
+            info.put("success", true);
+        } catch (Exception e) {
+            info.put("success", false);
+            info.put("message", "获取系统基本信息失败: " + e.getMessage());
+            // Log the exception
+            System.err.println("Error getting basic system info: " + e.getMessage());
+        }
+        return info;
+    }
     
     /**
      * 比较值与阈值

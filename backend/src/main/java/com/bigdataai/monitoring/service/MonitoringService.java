@@ -60,4 +60,10 @@ public interface MonitoringService {
      * @return 包含告警信息的列表
      */
     List<Map<String, Object>> getAlerts(String startTime, String endTime);
+
+    /**
+     * 获取系统基本信息
+     * @return 系统基本信息Map
+     */
+    Map<String, Object> getSystemBasicInfo();
 }
