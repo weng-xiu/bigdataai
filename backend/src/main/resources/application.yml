@@ -40,6 +40,9 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
   cloud:
+    config:
+      import-check:
+        enabled: false
     discovery:
       enabled: true
 
