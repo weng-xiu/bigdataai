@@ -1,5 +1,6 @@
 package com.bigdataai.security.controller;
 
+import com.bigdataai.common.ApiResponse; // Added import
 import com.bigdataai.security.CustomUserDetailsService;
 import com.bigdataai.security.JwtTokenUtil;
 import com.bigdataai.user.model.Permission;
@@ -14,8 +15,15 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.authentication.LockedException; // Added import
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException; // Added import
+import org.springframework.security.core.GrantedAuthority; // Added import
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger; // Added import
+import org.slf4j.LoggerFactory; // Added import
 
 import javax.imageio.ImageIO;
 import javax.servlet.http.HttpServletRequest;
@@ -43,6 +51,8 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class); // Added logger
 
     @Autowired
     private AuthenticationManager authenticationManager;
@@ -280,7 +290,8 @@ public class AuthController {
 
         try {
             // 根据用户名或邮箱查找实际用户名
-            String actualUsername = userService.findUsernameByUsernameOrEmail(usernameOrEmail)
+            String actualUsername = userService.findByUsernameOrEmail(usernameOrEmail) // Corrected method name
+                    .map(User::getUsername) // Assuming User object is returned
                     .orElseThrow(() -> new BadCredentialsException("用户名或密码错误"));
 
             // 使用实际用户名进行认证
@@ -319,35 +330,24 @@ public class AuthController {
 
             return ResponseEntity.ok(response);
 
-        } catch (DisabledException e) {
-            // 用户被禁用
-            loginFailCount++;
-            session.setAttribute(sessionKeyPrefix, loginFailCount);
-            // logLoginAttempt(usernameOrEmail, request, false, "用户已禁用");
-            response.put("status", "error");
-            response.put("message", "账户已被禁用，请联系管理员");
-            response.put("requireCaptcha", loginFailCount >= MAX_LOGIN_ATTEMPTS);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
         } catch (BadCredentialsException e) {
-            // 用户名或密码错误
-            loginFailCount++;
-            session.setAttribute(sessionKeyPrefix, loginFailCount);
+            // 登录失败，增加失败计数
+            incrementLoginAttempts(session, sessionKeyPrefix); // Added method call
             // logLoginAttempt(usernameOrEmail, request, false, "用户名或密码错误");
-            response.put("status", "error");
-            response.put("message", "用户名或密码错误");
-            response.put("requireCaptcha", loginFailCount >= MAX_LOGIN_ATTEMPTS);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
-        } catch (Exception e) {
-            // 其他认证异常
-            loginFailCount++;
-            session.setAttribute(sessionKeyPrefix, loginFailCount);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error("用户名或密码错误"));
+        } catch (DisabledException e) {
+            // logLoginAttempt(usernameOrEmail, request, false, "用户已禁用");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error("用户已禁用"));
+        } catch (LockedException e) { // Catch specific LockedException
+            // logLoginAttempt(usernameOrEmail, request, false, "账户已锁定");
+            return ResponseEntity.status(HttpStatus.LOCKED).body(ApiResponse.error("账户已锁定，请稍后再试或联系管理员"));
+        } catch (AuthenticationException e) { // Catch specific AuthenticationException
             // logLoginAttempt(usernameOrEmail, request, false, "认证失败: " + e.getMessage());
-            response.put("status", "error");
-            response.put("message", "登录失败，请稍后重试"); // 避免暴露过多内部错误细节
-            response.put("requireCaptcha", loginFailCount >= MAX_LOGIN_ATTEMPTS);
-            // 记录详细错误日志供排查
-            // log.error("Login failed for user '{}': {}", usernameOrEmail, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error("认证失败: " + e.getMessage()));
+        } catch (Exception e) {
+            log.error("登录时发生未知错误", e); // Use logger
+            // logLoginAttempt(usernameOrEmail, request, false, "登录时发生未知错误");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.error("登录时发生未知错误，请联系管理员"));
         }
     }
 
@@ -562,6 +562,8 @@ public class AuthController {
             throw new DisabledException("用户已禁用", e); // 保持原始异常类型
         } catch (BadCredentialsException e) {
             throw new BadCredentialsException("用户名或密码错误", e); // 保持原始异常类型
+        } catch (LockedException e) { // Added catch block for LockedException
+            throw new LockedException("账户已锁定", e);
         } catch (AuthenticationException e) {
              // 捕获更具体的 AuthenticationException
              throw new Exception("认证失败: " + e.getMessage(), e);
@@ -582,4 +584,14 @@ public class AuthController {
         response.put("message", e.getMessage());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
     }
+}
+
+
+// 添加 incrementLoginAttempts 方法
+private void incrementLoginAttempts(HttpSession session, String keyPrefix) {
+    Integer attempts = (Integer) session.getAttribute(keyPrefix);
+    if (attempts == null) {
+        attempts = 0;
+    }
+    session.setAttribute(keyPrefix, attempts + 1);
 }
