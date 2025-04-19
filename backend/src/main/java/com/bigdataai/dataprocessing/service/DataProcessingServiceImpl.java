@@ -1,5 +1,6 @@
 package com.bigdataai.dataprocessing.service;
 
+import com.bigdataai.common.ApiResponse;
 import com.bigdataai.dataintegration.model.DataSource;
 import com.bigdataai.dataintegration.service.DataSourceService;
 import org.apache.spark.api.java.JavaRDD;
@@ -27,12 +28,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 数据处理服务实现类
  */
 @Service
 public class DataProcessingServiceImpl implements DataProcessingService {
+
+    private static final Logger logger = LoggerFactory.getLogger(DataProcessingServiceImpl.class);
 
     @Autowired
     private SparkSession sparkSession;
@@ -48,23 +53,17 @@ public class DataProcessingServiceImpl implements DataProcessingService {
 
     @Override
     public Map<String, Object> cleanData(Long dataSourceId, String tableName, Map<String, Object> rules) {
-        Map<String, Object> result = new HashMap<>();
-
         try {
             // 获取数据源
             DataSource dataSource = dataSourceService.getDataSource(dataSourceId);
             if (dataSource == null) {
-                result.put("success", false);
-                result.put("message", "数据源不存在");
-                return result;
+                return ApiResponse.error("数据源不存在");
             }
 
             // 加载数据
             Dataset<Row> dataset = loadDataset(dataSource, tableName);
             if (dataset == null) {
-                result.put("success", false);
-                result.put("message", "加载数据失败");
-                return result;
+                return ApiResponse.error("加载数据失败");
             }
 
             // 应用清洗规则
@@ -72,38 +71,31 @@ public class DataProcessingServiceImpl implements DataProcessingService {
 
             // 返回处理结果
             long count = dataset.count();
-            result.put("success", true);
-            result.put("recordCount", count);
-            result.put("sampleData", dataset.limit(10).collectAsList());
+            Map<String, Object> data = new HashMap<>();
+            data.put("recordCount", count);
+            data.put("sampleData", dataset.limit(10).collectAsList());
+            
+            return ApiResponse.success("数据清洗成功", data);
 
         } catch (Exception e) {
             e.printStackTrace();
-            result.put("success", false);
-            result.put("message", "数据清洗失败: " + e.getMessage());
+            return ApiResponse.error("数据清洗失败: " + e.getMessage());
         }
-
-        return result;
     }
 
     @Override
     public Map<String, Object> transformData(Long dataSourceId, String tableName, Map<String, Object> transformations) {
-        Map<String, Object> result = new HashMap<>();
-
         try {
             // 获取数据源
             DataSource dataSource = dataSourceService.getDataSource(dataSourceId);
             if (dataSource == null) {
-                result.put("success", false);
-                result.put("message", "数据源不存在");
-                return result;
+                return ApiResponse.error("数据源不存在");
             }
 
             // 加载数据
             Dataset<Row> dataset = loadDataset(dataSource, tableName);
             if (dataset == null) {
-                result.put("success", false);
-                result.put("message", "加载数据失败");
-                return result;
+                return ApiResponse.error("加载数据失败");
             }
 
             // 应用转换规则
@@ -111,54 +103,46 @@ public class DataProcessingServiceImpl implements DataProcessingService {
 
             // 返回处理结果
             long count = dataset.count();
-            result.put("success", true);
-            result.put("recordCount", count);
-            result.put("sampleData", dataset.limit(10).collectAsList());
+            Map<String, Object> data = new HashMap<>();
+            data.put("recordCount", count);
+            data.put("sampleData", dataset.limit(10).collectAsList());
+            
+            return ApiResponse.success("数据转换成功", data);
 
         } catch (Exception e) {
-            e.printStackTrace();
-            result.put("success", false);
-            result.put("message", "数据转换失败: " + e.getMessage());
+            logger.error("数据转换失败", e);
+            return ApiResponse.error("数据转换失败: " + e.getMessage());
         }
-
-        return result;
     }
 
     @Override
     public Map<String, Object> aggregateData(Long dataSourceId, String tableName, Map<String, Object> aggregations) {
-        Map<String, Object> result = new HashMap<>();
-
         try {
             // 获取数据源
             DataSource dataSource = dataSourceService.getDataSource(dataSourceId);
             if (dataSource == null) {
-                result.put("success", false);
-                result.put("message", "数据源不存在");
-                return result;
+                return ApiResponse.error("数据源不存在");
             }
 
             // 加载数据
             Dataset<Row> dataset = loadDataset(dataSource, tableName);
             if (dataset == null) {
-                result.put("success", false);
-                result.put("message", "加载数据失败");
-                return result;
+                return ApiResponse.error("加载数据失败");
             }
 
             // 应用聚合规则
             dataset = applyAggregations(dataset, aggregations);
 
             // 返回处理结果
-            result.put("success", true);
-            result.put("aggregationResult", dataset.collectAsList());
+            Map<String, Object> data = new HashMap<>();
+            data.put("aggregationResult", dataset.collectAsList());
+            
+            return ApiResponse.success("数据聚合成功", data);
 
         } catch (Exception e) {
-            e.printStackTrace();
-            result.put("success", false);
-            result.put("message", "数据聚合失败: " + e.getMessage());
+            logger.error("数据聚合失败", e);
+            return ApiResponse.error("数据聚合失败: " + e.getMessage());
         }
-
-        return result;
     }
 
     @Override
