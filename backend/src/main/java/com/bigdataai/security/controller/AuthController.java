@@ -227,171 +227,130 @@ public class AuthController {
         String password = authRequest.get("password");
         String captcha = authRequest.get("captcha");
         
+        Map<String, Object> response = new HashMap<>();
+
         // 参数验证
         if (usernameOrEmail == null || usernameOrEmail.trim().isEmpty() || 
             password == null || password.trim().isEmpty()) {
-            Map<String, String> response = new HashMap<>();
             response.put("status", "error");
-            response.put("message", "用户名和密码不能为空");
+            response.put("message", "用户名/邮箱和密码不能为空");
             return ResponseEntity.badRequest().body(response);
         }
         
-        // 验证码校验
         HttpSession session = request.getSession();
-        // 检查是否需要验证码（登录失败次数超过3次）
-        Integer loginFailCount = (Integer) session.getAttribute("loginFailCount_" + usernameOrEmail);
-        if (loginFailCount != null && loginFailCount >= 3) {
-            // 需要验证码
+        String sessionKeyPrefix = "loginFailCount_" + usernameOrEmail.toLowerCase(); // Use consistent key
+        Integer loginFailCount = (Integer) session.getAttribute(sessionKeyPrefix);
+        if (loginFailCount == null) {
+            loginFailCount = 0;
+        }
+
+        // 验证码校验 (如果登录失败次数达到阈值)
+        final int MAX_LOGIN_ATTEMPTS = 3; // 可配置
+        if (loginFailCount >= MAX_LOGIN_ATTEMPTS) {
             if (captcha == null || captcha.trim().isEmpty()) {
-                Map<String, Object> response = new HashMap<>();
                 response.put("status", "error");
                 response.put("message", "请输入验证码");
-                response.put("requireCaptcha", true);
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+                return ResponseEntity.badRequest().body(response);
             }
-            
-            // 验证验证码
+
             String sessionCaptcha = (String) session.getAttribute("captchaCode");
             Long captchaExpireTime = (Long) session.getAttribute("captchaExpireTime");
-            
-            // 验证码为空或已过期
+
             if (sessionCaptcha == null || captchaExpireTime == null || System.currentTimeMillis() > captchaExpireTime) {
-                Map<String, Object> response = new HashMap<>();
                 response.put("status", "error");
-                response.put("message", "验证码已过期，请重新获取");
-                response.put("requireCaptcha", true);
+                response.put("message", "验证码已过期，请刷新");
+                // 清除旧验证码，避免重复使用
+                session.removeAttribute("captchaCode");
+                session.removeAttribute("captchaExpireTime");
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
             }
-            
-            // 验证码不匹配
+
             if (!sessionCaptcha.equalsIgnoreCase(captcha)) {
-                Map<String, Object> response = new HashMap<>();
+                // 验证码错误也增加失败计数
+                loginFailCount++;
+                session.setAttribute(sessionKeyPrefix, loginFailCount);
                 response.put("status", "error");
                 response.put("message", "验证码错误");
-                response.put("requireCaptcha", true);
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
             }
-            
-            // 验证成功，清除session中的验证码
+            // 验证码正确，从session中移除，防止重复使用
             session.removeAttribute("captchaCode");
             session.removeAttribute("captchaExpireTime");
         }
-        
-        // 获取客户端IP地址
-        String ipAddress = forwardedIp;
-        if (ipAddress == null || ipAddress.isEmpty()) {
-            ipAddress = realIp;
-        }
-        
+
         try {
-            // 使用Spring Security的AuthenticationManager进行认证
-            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(usernameOrEmail, password));
-            
-            // 认证成功后，使用UserService的login方法，支持用户名或邮箱登录，记录登录日志和处理账户锁定
-            Optional<User> userOpt = userService.login(usernameOrEmail, password, ipAddress, userAgent);
-            
-            if (!userOpt.isPresent()) {
-                // 登录失败，增加失败计数
-                if (loginFailCount == null) {
-                    loginFailCount = 1;
-                } else {
-                    loginFailCount++;
-                }
-                session.setAttribute("loginFailCount_" + usernameOrEmail, loginFailCount);
-                
-                Map<String, Object> response = new HashMap<>();
-                response.put("status", "error");
-                response.put("message", "用户名/邮箱或密码错误");
-                
-                // 如果失败次数达到阈值，提示需要验证码
-                if (loginFailCount >= 3) {
-                    response.put("requireCaptcha", true);
-                }
-                
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
-            }
-            
-            User user = userOpt.get();
-            
-            // 检查用户是否被锁定
-            if (user.isLocked()) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("status", "error");
-                response.put("message", "账户已被锁定，请稍后再试或联系管理员");
-                response.put("lockedTime", user.getLockedTime());
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-            }
-            
-            // 检查用户是否被禁用
-            if (!user.isEnabled()) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("status", "error");
-                response.put("message", "账户已被禁用，请联系管理员");
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-            }
-            
-            // 登录成功，清除失败计数
-            session.removeAttribute("loginFailCount_" + usernameOrEmail);
-            
-            // 生成JWT令牌
-            final UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
-            
-            // 准备额外的声明信息
-            Map<String, Object> additionalClaims = new HashMap<>();
-            additionalClaims.put("userId", user.getId());
-            additionalClaims.put("email", user.getEmail());
-            additionalClaims.put("lastLoginTime", user.getLastLoginTime().getTime());
-            
-            // 添加角色信息
-            List<String> roles = user.getRoles().stream()
-                    .map(Role::getName)
-                    .collect(Collectors.toList());
-            additionalClaims.put("roles", roles);
-            
-            // 添加权限信息
-            List<String> permissions = new ArrayList<>();
-            for (Role role : user.getRoles()) {
-                for (Permission permission : role.getPermissions()) {
-                    permissions.add(permission.getPermission());
-                }
-            }
-            additionalClaims.put("permissions", permissions);
-            
-            // 生成带有额外信息的令牌
-            final String token = jwtTokenUtil.generateToken(userDetails, additionalClaims);
+            // 根据用户名或邮箱查找实际用户名
+            String actualUsername = userService.findUsernameByUsernameOrEmail(usernameOrEmail)
+                    .orElseThrow(() -> new BadCredentialsException("用户名或密码错误"));
+
+            // 使用实际用户名进行认证
+            authenticate(actualUsername, password);
+
+            // 认证成功，加载用户信息并生成令牌
+            final UserDetails userDetails = userDetailsService.loadUserByUsername(actualUsername);
+            final String token = jwtTokenUtil.generateToken(userDetails);
             final String refreshToken = jwtTokenUtil.generateRefreshToken(userDetails);
-            
-            Map<String, Object> response = new HashMap<>();
+
+            // 登录成功，重置失败计数器
+            session.removeAttribute(sessionKeyPrefix);
+
+            // 获取用户信息
+            User user = userService.findByUsername(actualUsername).orElse(null); // 理论上此时用户一定存在
+
+            // 构建成功响应
             response.put("status", "success");
             response.put("message", "登录成功");
             response.put("token", token);
             response.put("refreshToken", refreshToken);
-            response.put("tokenType", "Bearer");
-            response.put("expiresIn", jwtTokenUtil.getExpirationDateFromToken(token).getTime() / 1000);
             
-            // 构建用户信息响应
-            Map<String, Object> userInfo = buildUserInfoResponse(user);
-            response.put("user", userInfo);
-            
+            if (user != null) {
+                Map<String, Object> userInfo = new HashMap<>();
+                userInfo.put("id", user.getId());
+                userInfo.put("username", user.getUsername());
+                userInfo.put("email", user.getEmail());
+                // 注意：避免直接暴露密码等敏感信息
+                // userInfo.put("roles", user.getRoles().stream().map(Role::getName).collect(Collectors.toList()));
+                userInfo.put("roles", userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).collect(Collectors.toList()));
+                response.put("user", userInfo);
+            }
+
+            // 记录登录日志 (可选)
+            // logLoginAttempt(actualUsername, request, true, null);
+
             return ResponseEntity.ok(response);
+
         } catch (DisabledException e) {
-            Map<String, Object> response = new HashMap<>();
+            // 用户被禁用
+            loginFailCount++;
+            session.setAttribute(sessionKeyPrefix, loginFailCount);
+            // logLoginAttempt(usernameOrEmail, request, false, "用户已禁用");
             response.put("status", "error");
-            response.put("message", "账户已被禁用");
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+            response.put("message", "账户已被禁用，请联系管理员");
+            response.put("requireCaptcha", loginFailCount >= MAX_LOGIN_ATTEMPTS);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
         } catch (BadCredentialsException e) {
-            Map<String, Object> response = new HashMap<>();
+            // 用户名或密码错误
+            loginFailCount++;
+            session.setAttribute(sessionKeyPrefix, loginFailCount);
+            // logLoginAttempt(usernameOrEmail, request, false, "用户名或密码错误");
             response.put("status", "error");
             response.put("message", "用户名或密码错误");
+            response.put("requireCaptcha", loginFailCount >= MAX_LOGIN_ATTEMPTS);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
         } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
+            // 其他认证异常
+            loginFailCount++;
+            session.setAttribute(sessionKeyPrefix, loginFailCount);
+            // logLoginAttempt(usernameOrEmail, request, false, "认证失败: " + e.getMessage());
             response.put("status", "error");
-            response.put("message", "登录失败: " + e.getMessage());
+            response.put("message", "登录失败，请稍后重试"); // 避免暴露过多内部错误细节
+            response.put("requireCaptcha", loginFailCount >= MAX_LOGIN_ATTEMPTS);
+            // 记录详细错误日志供排查
+            // log.error("Login failed for user '{}': {}", usernameOrEmail, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
-    
+
     /**
      * 构建用户信息响应
      * @param user 用户对象
@@ -600,11 +559,15 @@ public class AuthController {
         try {
             authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
         } catch (DisabledException e) {
-            throw new Exception("用户已禁用", e);
+            throw new DisabledException("用户已禁用", e); // 保持原始异常类型
         } catch (BadCredentialsException e) {
-            throw new Exception("用户名或密码错误", e);
+            throw new BadCredentialsException("用户名或密码错误", e); // 保持原始异常类型
+        } catch (AuthenticationException e) {
+             // 捕获更具体的 AuthenticationException
+             throw new Exception("认证失败: " + e.getMessage(), e);
         } catch (Exception e) {
-            throw new Exception("认证失败: " + e.getMessage(), e);
+            // 其他未知异常
+            throw new Exception("认证过程中发生未知错误", e);
         }
     }
     
