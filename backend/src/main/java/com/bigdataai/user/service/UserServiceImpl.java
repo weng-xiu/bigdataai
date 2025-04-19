@@ -50,9 +50,13 @@ public class UserServiceImpl implements UserService {
     @Autowired
     private UserLogMapper userLogMapper;
 
-    @Autowired
     private PasswordEncoder passwordEncoder;
-    
+
+    @Autowired
+    public void setPasswordEncoder(PasswordEncoder passwordEncoder) {
+        this.passwordEncoder = passwordEncoder;
+    }
+
     @Value("${security.login.max-fail-count:5}")
     private int maxLoginFailCount;
     

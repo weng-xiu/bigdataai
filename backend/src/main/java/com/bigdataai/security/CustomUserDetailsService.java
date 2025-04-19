@@ -26,11 +26,14 @@ import java.util.Optional;
 @Service
 public class CustomUserDetailsService implements UserDetailsService {
 
+    private final UserMapper userMapper;
+    private final UserService userService;
+
     @Autowired
-    private UserMapper userMapper;
-    
-    @Autowired
-    private UserService userService;
+    public CustomUserDetailsService(UserMapper userMapper, UserService userService) {
+        this.userMapper = userMapper;
+        this.userService = userService;
+    }
 
     @Override
     @Transactional

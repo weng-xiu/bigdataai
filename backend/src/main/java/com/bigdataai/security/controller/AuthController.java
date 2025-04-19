@@ -584,14 +584,13 @@ public class AuthController {
         response.put("message", e.getMessage());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
     }
-}
 
 
-// 添加 incrementLoginAttempts 方法
-private void incrementLoginAttempts(HttpSession session, String keyPrefix) {
-    Integer attempts = (Integer) session.getAttribute(keyPrefix);
-    if (attempts == null) {
-        attempts = 0;
+    private void incrementLoginAttempts(HttpSession session, String keyPrefix) {
+        Integer attempts = (Integer) session.getAttribute(keyPrefix);
+        if (attempts == null) {
+            attempts = 0;
+        }
+        session.setAttribute(keyPrefix, attempts + 1);
     }
-    session.setAttribute(keyPrefix, attempts + 1);
 }
