@@ -39,6 +39,25 @@ public class DataSource {
     private Date createTime;
     
     private Date updateTime;
-    
 
+    // Explicit Getters to ensure compilation
+    public DataSourceType getType() {
+        return type;
+    }
+
+    public String getConnectionUrl() {
+        return connectionUrl;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
 }

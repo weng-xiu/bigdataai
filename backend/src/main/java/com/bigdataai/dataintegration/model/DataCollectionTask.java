@@ -47,4 +47,34 @@ public class DataCollectionTask {
     private Date createTime; // 创建时间
     
     private Date updateTime; // 更新时间
+
+    // Explicit Setters to ensure compilation
+    public void setCreateTime(Date createTime) {
+        this.createTime = createTime;
+    }
+
+    public void setUpdateTime(Date updateTime) {
+        this.updateTime = updateTime;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    // Explicit Getters/Setters to ensure compilation
+    public Long getDataSourceId() {
+        return dataSourceId;
+    }
+
+    public Boolean getEnabled() {
+        return enabled;
+    }
+
+    public void setLastExecutionTime(Date lastExecutionTime) {
+        this.lastExecutionTime = lastExecutionTime;
+    }
+
+    public String getSourceTable() {
+        return sourceTable;
+    }
 }

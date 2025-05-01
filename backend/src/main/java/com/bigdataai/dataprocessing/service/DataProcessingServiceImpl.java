@@ -1,5 +1,8 @@
 package com.bigdataai.dataprocessing.service;
 
+import com.bigdataai.dataintegration.model.DataSourceType;
+import static com.bigdataai.dataintegration.model.DataSourceType.*; // 添加静态导入
+
 import com.bigdataai.common.ApiResponse;
 import com.bigdataai.dataintegration.model.DataSource;
 import com.bigdataai.dataintegration.service.DataSourceService;
@@ -1368,6 +1371,20 @@ public class DataProcessingServiceImpl implements DataProcessingService {
                             .option("dbtable", tableName)
                             .option("user", dataSource.getUsername())
                             .option("password", dataSource.getPassword())
+                            .load();
+                case MONGODB:
+                    return sparkSession.read()
+                            .format("mongo")
+                            .option("uri", dataSource.getConnectionUrl())
+                            .option("database", dataSource.getProperties().get("database"))
+                            .option("collection", tableName)
+                            .load();
+                case ELASTICSEARCH:
+                    return sparkSession.read()
+                            .format("org.elasticsearch.spark.sql")
+                            .option("es.nodes", dataSource.getConnectionUrl())
+                            .option("es.port", dataSource.getProperties().get("port"))
+                            .option("es.resource", tableName)
                             .load();
                 case MONGODB:
                     return sparkSession.read()

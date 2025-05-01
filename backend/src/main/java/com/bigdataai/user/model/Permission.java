@@ -24,4 +24,13 @@ public class Permission {
     
     // 权限标识，如：user:create, user:update等
     private String permission;
+
+    // Explicit Getters to ensure compilation
+    public Long getId() {
+        return id;
+    }
+
+    public String getPermission() {
+        return permission;
+    }
 }
