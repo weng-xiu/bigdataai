@@ -5,9 +5,9 @@ spring:
   application:
     name: bigdata-ai-service
   datasource:
-    url: jdbc:mysql://localhost:3306/bigdata_db?useSSL=false&serverTimezone=UTC
+    url: jdbc:mysql://localhost:13306/bigdata_db?useSSL=false&serverTimezone=UTC
     username: root
-    password: password
+    password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
   mybatis-plus:
     mapper-locations: classpath*:/mapper/**/*.xml

@@ -7,11 +7,13 @@ CREATE TABLE IF NOT EXISTS `users` (
   `password` VARCHAR(100) NOT NULL COMMENT '密码(加密存储)',
   `email` VARCHAR(100) COMMENT '邮箱',
   `phone` VARCHAR(20) COMMENT '手机号',
-  `real_name` VARCHAR(50) COMMENT '真实姓名',
+  `real_name` VARCHAR(100) COMMENT '真实姓名',
   `avatar` VARCHAR(255) COMMENT '头像URL',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态: 0-禁用, 1-启用',
   `last_login_time` DATETIME COMMENT '最后登录时间',
   `last_login_ip` VARCHAR(50) COMMENT '最后登录IP',
+  `login_fail_count` INT DEFAULT 0 COMMENT '登录失败次数',
+  `locked_time` DATETIME COMMENT '账户锁定时间',
   `created_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '是否删除: 0-未删除, 1-已删除',
@@ -84,8 +86,8 @@ CREATE TABLE IF NOT EXISTS `role_permissions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色权限关联表';
 
 -- 初始化超级管理员用户和角色
-INSERT INTO `users` (`username`, `password`, `email`, `real_name`, `status`) VALUES
-('admin', '$2a$10$OhfZv.1O8gxcBvXRH/E.YOiPz/KYNn7SnDgPvvYkQvELULM0qjxPS', 'admin@example.com', '系统管理员', 1);
+INSERT INTO `users` (`username`, `password`, `email`, `real_name`, `status`, `login_fail_count`, `locked_time`) VALUES
+('admin', '$2a$10$OhfZv.1O8gxcBvXRH/E.YOiPz/KYNn7SnDgPvvYkQvELULM0qjxPS', 'admin@example.com', '系统管理员', 1, 0, NULL);
 
 INSERT INTO `roles` (`name`, `code`, `description`, `status`) VALUES
 ('超级管理员', 'ROLE_ADMIN', '系统超级管理员，拥有所有权限', 1),
@@ -94,6 +96,30 @@ INSERT INTO `roles` (`name`, `code`, `description`, `status`) VALUES
 -- 关联超级管理员用户和角色
 INSERT INTO `user_roles` (`user_id`, `role_id`) VALUES
 (1, 1);
+
+-- 初始化基础权限
+INSERT INTO `permissions` (`name`, `code`, `type`, `parent_id`, `path`, `status`) VALUES
+('用户管理', 'user:manage', 'menu', 0, '/user', 1),
+('查看用户', 'user:view', 'button', 1, NULL, 1),
+('编辑用户', 'user:edit', 'button', 1, NULL, 1),
+('删除用户', 'user:delete', 'button', 1, NULL, 1),
+('角色管理', 'role:manage', 'menu', 0, '/role', 1),
+('查看角色', 'role:view', 'button', 5, NULL, 1),
+('编辑角色', 'role:edit', 'button', 5, NULL, 1),
+('删除角色', 'role:delete', 'button', 5, NULL, 1),
+('权限管理', 'permission:manage', 'menu', 0, '/permission', 1),
+('查看权限', 'permission:view', 'button', 9, NULL, 1),
+('编辑权限', 'permission:edit', 'button', 9, NULL, 1),
+('删除权限', 'permission:delete', 'button', 9, NULL, 1);
+
+-- 关联角色和权限 (超级管理员拥有所有权限, 普通用户拥有查看权限)
+-- 超级管理员 (role_id = 1)
+INSERT INTO `role_permissions` (`role_id`, `permission_id`) VALUES
+(1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12);
+
+-- 普通用户 (role_id = 2)
+INSERT INTO `role_permissions` (`role_id`, `permission_id`) VALUES
+(2, 1), (2, 2), (2, 5), (2, 6), (2, 9), (2, 10);
 
 -- 注意: 密码为加密后的字符串，原始密码为 'admin123'
 -- 实际应用中应使用BCrypt或其他安全的密码加密算法

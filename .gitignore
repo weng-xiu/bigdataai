@@ -10,7 +10,7 @@ target/
 # Environment
 .env
 *.log
-
+/.trae
 # System files
 .DS_Store
 Thumbs.db

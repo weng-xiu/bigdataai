@@ -87,9 +87,6 @@ const showCaptcha = ref(false)
 // 验证码URL
 const captchaUrl = ref('')
 
--// 登录失败次数
--const loginFailCount = ref(parseInt(localStorage.getItem('loginFailCount') || '0'))
--
 // 登录表单数据
 const loginForm = reactive({
   username: '',
@@ -105,10 +102,7 @@ onMounted(() => {
     loginForm.username = rememberedUsername
     loginForm.remember = true
   }
-  
--  // 检查是否需要显示验证码
--  checkCaptchaRequired()
-+  // 页面加载时不主动检查验证码，由登录失败触发
+  // 页面加载时不主动检查验证码，由登录失败触发
 })
 
 // 表单验证规则
@@ -137,28 +131,23 @@ const loginRules = {
     { min: 6, max: 20, message: '密码长度应为6-20个字符', trigger: 'blur' }
   ],
   captcha: [
-    { required: true, trigger: 'blur', message: '请输入验证码' },
-    { min: 4, max: 6, message: '验证码长度不正确', trigger: 'blur' }
+    // 验证码只有在显示时才需要校验
+    { validator: (rule, value, callback) => {
+        if (showCaptcha.value && !value) {
+          callback(new Error('请输入验证码'))
+        } else if (showCaptcha.value && (value.length < 4 || value.length > 6)) {
+          callback(new Error('验证码长度不正确'))
+        } else {
+          callback()
+        }
+      }, trigger: 'blur' }
   ]
 }
 
--// 检查是否需要显示验证码
--const checkCaptchaRequired = () => {
--  // 如果登录失败次数超过3次，显示验证码
--  if (loginFailCount.value >= 3) {
--    showCaptcha.value = true
--    refreshCaptcha()
--  }
--}
--
 // 刷新验证码
 const refreshCaptcha = () => {
--  if (showCaptcha.value) {
--    // 添加时间戳防止缓存
--    captchaUrl.value = `/api/auth/captcha?t=${new Date().getTime()}`
--  }
-+  // 确保只在需要时才刷新
-+  captchaUrl.value = `/api/auth/captcha?t=${new Date().getTime()}`
+  // 确保只在需要时才刷新
+  captchaUrl.value = `/api/auth/captcha?t=${new Date().getTime()}`
 }
 
 // 处理登录
@@ -166,90 +155,57 @@ const handleLogin = () => {
   loginFormRef.value.validate(valid => {
     if (valid) {
       loading.value = true
-      
-      // 保存记住登录状态
-      localStorage.setItem('remember', loginForm.remember)
-      
+
       // 构建登录请求参数
       const loginData = {
         username: loginForm.username,
--        password: loginForm.password,
--        remember: loginForm.remember
-+        password: loginForm.password
+        password: loginForm.password
       }
-      
+
       // 如果显示验证码，添加验证码参数
       if (showCaptcha.value) {
         loginData.captcha = loginForm.captcha
       }
-      
+
       store.dispatch('user/login', loginData)
         .then((user) => {
           ElMessage.success('登录成功')
-          
--          // 登录成功，重置登录失败次数
--          loginFailCount.value = 0
--          localStorage.removeItem('loginFailCount')
-+          // 登录成功，清除记住的用户名（如果未勾选记住）
-+          if (!loginForm.remember) {
-+            localStorage.removeItem('rememberedUsername')
-+          } else {
-+            localStorage.setItem('rememberedUsername', loginForm.username)
-+          }
-+          localStorage.setItem('remember', loginForm.remember)
-          
--          // 如果选择了记住密码，可以在本地存储用户名
--          if (loginForm.remember) {
--            localStorage.setItem('rememberedUsername', loginForm.username)
--          } else {
--            localStorage.removeItem('rememberedUsername')
--          }
--          
-          // 根据用户角色决定跳转页面
-          const roles = user.roles || []
-          if (roles.includes('ROLE_ADMIN')) {
-            router.push({ path: '/dashboard' })
+
+          // 登录成功，处理“记住我”
+          if (loginForm.remember) {
+            localStorage.setItem('rememberedUsername', loginForm.username)
+            localStorage.setItem('remember', 'true')
           } else {
-            router.push({ path: '/' })
+            localStorage.removeItem('rememberedUsername')
+            localStorage.removeItem('remember')
           }
-        }) 
--        .catch(error => {
--          console.error('Login error:', error)
--          loading.value = false
--          
--          // 登录失败，增加失败次数
--          loginFailCount.value++
--          localStorage.setItem('loginFailCount', loginFailCount.value.toString())
--          
--          // 检查是否需要显示验证码
--          checkCaptchaRequired()
--          
--          // 显示错误消息
--          const message = error.response?.data?.message || '登录失败，请检查您的凭据'
--          ElMessage.error(message)
-+        .catch(err => {
-+          loading.value = false
-+          const errorData = err.response?.data
-+          const message = errorData?.message || '登录请求失败'
-+          ElMessage.error(message)
-+
-+          // 根据后端返回决定是否显示验证码
-+          if (errorData?.requireCaptcha) {
-+            showCaptcha.value = true
-+            refreshCaptcha()
-+            // 清空之前的验证码输入
-+            loginForm.captcha = ''
-+          } else {
-+            // 如果后端没要求验证码（例如首次密码错误），则不显示
-+            // 但如果之前已显示，则保持显示并刷新
-+            if (showCaptcha.value) {
-+              refreshCaptcha()
-+              loginForm.captcha = ''
-+            }
-+          }
+          // 登录成功后隐藏验证码
+          showCaptcha.value = false
+
+          // 跳转到首页或其他页面
+          router.push('/')
+        })
+        .catch(error => {
+          // 处理登录失败
+          const errorMessage = error.message || '登录失败，请稍后重试'
+          ElMessage.error(errorMessage)
+
+          // 检查后端返回是否需要显示验证码
+          if (error.data && error.data.captchaRequired) {
+            showCaptcha.value = true
+            refreshCaptcha()
+          } else {
+            // 如果不是因为需要验证码而失败，且验证码当前是显示的，也刷新一下
+            if (showCaptcha.value) {
+              refreshCaptcha()
+            }
+          }
+        })
+        .finally(() => {
+          loading.value = false
         })
     } else {
-      console.log('表单验证失败!')
+      console.log('表单验证失败')
       return false
     }
   })

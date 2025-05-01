@@ -248,349 +248,806 @@ public class AuthController {
         }
         
         HttpSession session = request.getSession();
-        String sessionKeyPrefix = "loginFailCount_" + usernameOrEmail.toLowerCase(); // Use consistent key
-        Integer loginFailCount = (Integer) session.getAttribute(sessionKeyPrefix);
-        if (loginFailCount == null) {
-            loginFailCount = 0;
-        }
+        String ipAddress = getClientIpAddress(request, forwardedIp, realIp);
+        
+        // 检查是否需要验证码 (基于Session中的失败记录或用户状态，此处简化，先尝试认证)
+        // boolean requiresCaptcha = checkCaptchaRequirement(usernameOrEmail, session);
+        boolean requiresCaptchaCheckPostFailure = true; // 标记是否需要在认证失败后检查验证码需求
+        boolean captchaVerified = false; // 标记验证码是否已验证（如果需要的话）
 
-        // 验证码校验 (如果登录失败次数达到阈值)
-        final int MAX_LOGIN_ATTEMPTS = 3; // 可配置
-        if (loginFailCount >= MAX_LOGIN_ATTEMPTS) {
-            if (captcha == null || captcha.trim().isEmpty()) {
-                response.put("status", "error");
-                response.put("message", "请输入验证码");
-                return ResponseEntity.badRequest().body(response);
-            }
+        // 尝试从数据库获取用户信息，以判断是否一开始就需要验证码（例如账户已锁定）
+        Optional<User> initialUserOptional = userService.findByUsernameOrEmail(usernameOrEmail);
+        if (initialUserOptional.isPresent()) {
+            User initialUser = initialUserOptional.get();
+            if (initialUser.isLocked() || initialUser.getLoginFailCount() >= 3) { // 假设失败3次或已锁定则需要验证码
+                String sessionCaptcha = (String) session.getAttribute("captchaCode");
+                Long captchaExpireTime = (Long) session.getAttribute("captchaExpireTime");
 
-            String sessionCaptcha = (String) session.getAttribute("captchaCode");
-            Long captchaExpireTime = (Long) session.getAttribute("captchaExpireTime");
-
-            if (sessionCaptcha == null || captchaExpireTime == null || System.currentTimeMillis() > captchaExpireTime) {
-                response.put("status", "error");
-                response.put("message", "验证码已过期，请刷新");
-                // 清除旧验证码，避免重复使用
+                if (captcha == null || captcha.trim().isEmpty()) {
+                    response.put("status", "error");
+                    response.put("message", "请输入验证码");
+                    response.put("captchaRequired", true);
+                    return ResponseEntity.badRequest().body(response);
+                }
+                if (sessionCaptcha == null || captchaExpireTime == null || System.currentTimeMillis() > captchaExpireTime) {
+                    response.put("status", "error");
+                    response.put("message", "验证码已过期，请重新获取");
+                    response.put("captchaRequired", true);
+                    return ResponseEntity.badRequest().body(response);
+                }
+                if (!sessionCaptcha.equalsIgnoreCase(captcha)) {
+                    response.put("status", "error");
+                    response.put("message", "验证码错误");
+                    response.put("captchaRequired", true);
+                    return ResponseEntity.badRequest().body(response);
+                }
+                // 验证码验证成功
                 session.removeAttribute("captchaCode");
                 session.removeAttribute("captchaExpireTime");
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+                captchaVerified = true;
+                requiresCaptchaCheckPostFailure = false; // 初始验证码已通过，失败后无需再次检查
             }
-
-            if (!sessionCaptcha.equalsIgnoreCase(captcha)) {
-                // 验证码错误也增加失败计数
-                loginFailCount++;
-                session.setAttribute(sessionKeyPrefix, loginFailCount);
-                response.put("status", "error");
-                response.put("message", "验证码错误");
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-            }
-            // 验证码正确，从session中移除，防止重复使用
-            session.removeAttribute("captchaCode");
-            session.removeAttribute("captchaExpireTime");
         }
 
         try {
-            // 根据用户名或邮箱查找实际用户名
-            String actualUsername = userService.findByUsernameOrEmail(usernameOrEmail) // Corrected method name
-                    .map(User::getUsername) // Assuming User object is returned
-                    .orElseThrow(() -> new BadCredentialsException("用户名或密码错误"));
+            // 使用用户名进行认证
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(usernameOrEmail, password)
+            );
+            SecurityContextHolder.getContext().setAuthentication(authentication);
 
-            // 使用实际用户名进行认证
-            authenticate(actualUsername, password);
+            // 获取认证成功的用户信息
+            final UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+            // 使用 UserServiceImpl 的 login 方法处理成功逻辑（重置计数、记录日志等）
+            Optional<User> loggedInUserOptional = userService.login(userDetails.getUsername(), password, ipAddress, userAgent);
 
-            // 认证成功，加载用户信息并生成令牌
-            final UserDetails userDetails = userDetailsService.loadUserByUsername(actualUsername);
+            if (!loggedInUserOptional.isPresent()) {
+                 // login 方法内部已处理失败情况，理论上认证成功后这里应该总是有用户
+                 // 但为保险起见，添加错误处理
+                 log.error("Login successful via AuthenticationManager but UserServiceImpl.login failed for {}", userDetails.getUsername());
+                 response.put("status", "error");
+                 response.put("message", "登录处理失败，请联系管理员");
+                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            }
+            
+            User loggedInUser = loggedInUserOptional.get();
+            
+            // UserServiceImpl.login 已记录成功日志，此处无需重复记录
+            // UserLog log = UserLog.createLoginSuccessLog(loggedInUser.getId(), loggedInUser.getUsername(), ipAddress, userAgent);
+            // userService.saveUserLog(log); 
+
+            // 生成令牌
             final String token = jwtTokenUtil.generateToken(userDetails);
             final String refreshToken = jwtTokenUtil.generateRefreshToken(userDetails);
 
-            // 登录成功，重置失败计数器
-            session.removeAttribute(sessionKeyPrefix);
-
-            // 获取用户信息
-            User user = userService.findByUsername(actualUsername).orElse(null); // 理论上此时用户一定存在
-
             // 构建成功响应
             response.put("status", "success");
-            response.put("message", "登录成功");
             response.put("token", token);
             response.put("refreshToken", refreshToken);
+            response.put("message", "登录成功");
             
-            if (user != null) {
-                Map<String, Object> userInfo = new HashMap<>();
-                userInfo.put("id", user.getId());
-                userInfo.put("username", user.getUsername());
-                userInfo.put("email", user.getEmail());
-                // 注意：避免直接暴露密码等敏感信息
-                // userInfo.put("roles", user.getRoles().stream().map(Role::getName).collect(Collectors.toList()));
-                userInfo.put("roles", userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).collect(Collectors.toList()));
-                response.put("user", userInfo);
-            }
-
-            // 记录登录日志 (可选)
-            // logLoginAttempt(actualUsername, request, true, null);
+            Map<String, Object> userInfo = new HashMap<>();
+            userInfo.put("id", loggedInUser.getId());
+            userInfo.put("username", loggedInUser.getUsername());
+            userInfo.put("email", loggedInUser.getEmail());
+            // 确保返回的是角色名称列表
+            userInfo.put("roles", loggedInUser.getRoles() != null ? 
+                                    loggedInUser.getRoles().stream().map(Role::getName).collect(Collectors.toList()) : 
+                                    Collections.emptyList()); 
+            response.put("user", userInfo);
 
             return ResponseEntity.ok(response);
 
         } catch (BadCredentialsException e) {
-            // 登录失败，增加失败计数
-            incrementLoginAttempts(session, sessionKeyPrefix); // Added method call
-            // logLoginAttempt(usernameOrEmail, request, false, "用户名或密码错误");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error("用户名或密码错误"));
+            // 密码错误 - UserServiceImpl.login 已处理失败计数和日志
+            response.put("status", "error");
+            response.put("message", "用户名或密码错误");
+            // 认证失败后检查是否需要验证码
+            checkAndSetCaptchaRequired(usernameOrEmail, response);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (LockedException e) {
+            // 账户锁定 - UserServiceImpl.login 已处理日志
+            response.put("status", "error");
+            response.put("message", "账户已锁定");
+            response.put("captchaRequired", true); // 账户锁定时强制要求验证码
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
         } catch (DisabledException e) {
-            // logLoginAttempt(usernameOrEmail, request, false, "用户已禁用");
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error("用户已禁用"));
-        } catch (LockedException e) { // Catch specific LockedException
-            // logLoginAttempt(usernameOrEmail, request, false, "账户已锁定");
-            return ResponseEntity.status(HttpStatus.LOCKED).body(ApiResponse.error("账户已锁定，请稍后再试或联系管理员"));
-        } catch (AuthenticationException e) { // Catch specific AuthenticationException
-            // logLoginAttempt(usernameOrEmail, request, false, "认证失败: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error("认证失败: " + e.getMessage()));
+            // 账户禁用 - UserServiceImpl.login 已处理日志
+            response.put("status", "error");
+            response.put("message", "账户已禁用");
+            // 禁用的账户通常不需要验证码，但可以根据策略调整
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (UsernameNotFoundException e) {
+            // 用户名不存在 - UserServiceImpl.login 已处理日志
+            response.put("status", "error");
+            response.put("message", "用户名或邮箱不存在");
+            // 用户不存在时通常不需要验证码
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (AuthenticationException e) {
+            // 其他认证异常
+            log.error("Authentication failed for user {}: {}", usernameOrEmail, e.getMessage());
+            response.put("status", "error");
+            response.put("message", "认证失败: " + e.getMessage());
+            // 认证失败后检查是否需要验证码
+            checkAndSetCaptchaRequired(usernameOrEmail, response);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
         } catch (Exception e) {
-            log.error("登录时发生未知错误", e); // Use logger
-            // logLoginAttempt(usernameOrEmail, request, false, "登录时发生未知错误");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.error("登录时发生未知错误，请联系管理员"));
+            // 其他未知错误
+            log.error("Login error for user {}: {}", usernameOrEmail, e.getMessage(), e);
+            response.put("status", "error");
+            response.put("message", "登录过程中发生内部错误");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
 
     /**
-     * 构建用户信息响应
-     * @param user 用户对象
-     * @return 用户信息Map
+     * 检查用户状态并设置 captchaRequired 标志
+     * @param usernameOrEmail 用户名或邮箱
+     * @param response 响应Map
      */
-    private Map<String, Object> buildUserInfoResponse(User user) {
-        Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put("id", user.getId());
-        userInfo.put("username", user.getUsername());
-        userInfo.put("email", user.getEmail());
-        userInfo.put("fullName", user.getFullName());
-        userInfo.put("phone", user.getPhone());
-        userInfo.put("lastLoginTime", user.getLastLoginTime());
-        userInfo.put("createTime", user.getCreateTime());
-        userInfo.put("enabled", user.isEnabled());
-        
-        // 添加角色信息
-        List<String> roleNames = user.getRoles().stream()
-                .map(Role::getName)
-                .collect(Collectors.toList());
-        userInfo.put("roles", roleNames);
-        
-        // 添加权限信息 - 使用Set去重
-        Set<String> permissionSet = new HashSet<>();
-        for (Role role : user.getRoles()) {
-            for (Permission permission : role.getPermissions()) {
-                permissionSet.add(permission.getPermission());
+    private void checkAndSetCaptchaRequired(String usernameOrEmail, Map<String, Object> response) {
+        Optional<User> userOptional = userService.findByUsernameOrEmail(usernameOrEmail);
+        if (userOptional.isPresent()) {
+            User user = userOptional.get();
+            // 根据失败次数决定是否需要验证码 (假设失败3次后需要)
+            if (user.getLoginFailCount() >= 3) { 
+                response.put("captchaRequired", true);
             }
         }
-        userInfo.put("permissions", new ArrayList<>(permissionSet));
-        
-        return userInfo;
+        // 如果用户不存在，则不设置 captchaRequired
     }
 
     /**
-     * 刷新令牌
-     * @param refreshTokenRequest 刷新令牌请求
-     * @return 新的JWT令牌
+     * 获取客户端IP地址
+     * @param request HTTP请求
+     * @param forwardedIp X-Forwarded-For头
+     * @param realIp X-Real-IP头
+     * @return IP地址
      */
-    @PostMapping("/refresh-token")
-    public ResponseEntity<?> refreshToken(@RequestBody Map<String, String> refreshTokenRequest) {
-        String refreshToken = refreshTokenRequest.get("refreshToken");
+    private String getClientIpAddress(HttpServletRequest request, String forwardedIp, String realIp) {
+        String ipAddress = realIp; // 优先使用 X-Real-IP
+        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+            ipAddress = forwardedIp; // 其次使用 X-Forwarded-For
+        }
+        if (ipAddress != null && !ipAddress.isEmpty() && !"unknown".equalsIgnoreCase(ipAddress)) {
+            // X-Forwarded-For 可能包含多个IP，取第一个
+            int commaIndex = ipAddress.indexOf(',');
+            if (commaIndex != -1) {
+                ipAddress = ipAddress.substring(0, commaIndex);
+            }
+        }
+        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+            ipAddress = request.getRemoteAddr(); // 最后使用 request.getRemoteAddr()
+        }
+        return ipAddress;
+    }
+
+    // 移除 handleLoginFailure 方法，逻辑已整合到 catch 块和 checkAndSetCaptchaRequired
+    /*
+    private void handleLoginFailure(String usernameOrEmail, String ipAddress, String userAgent, String reason, Map<String, Object> response) {
+        ...
+    }
+    */
+
+// ... existing code ...
+    /**
+     * 用户登录
+     * @param authRequest 登录请求
+     * @return JWT令牌
+     */
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody Map<String, String> authRequest, 
+                                  @RequestHeader(value = "X-Forwarded-For", required = false) String forwardedIp,
+                                  @RequestHeader(value = "User-Agent", required = false) String userAgent,
+                                  @RequestHeader(value = "X-Real-IP", required = false) String realIp,
+                                  HttpServletRequest request) {
+        String usernameOrEmail = authRequest.get("username");
+        String password = authRequest.get("password");
+        String captcha = authRequest.get("captcha");
         
-        if (refreshToken == null || refreshToken.trim().isEmpty()) {
-            Map<String, Object> response = new HashMap<>();
+        Map<String, Object> response = new HashMap<>();
+
+        // 参数验证
+        if (usernameOrEmail == null || usernameOrEmail.trim().isEmpty() || 
+            password == null || password.trim().isEmpty()) {
             response.put("status", "error");
-            response.put("message", "刷新令牌不能为空");
+            response.put("message", "用户名/邮箱和密码不能为空");
             return ResponseEntity.badRequest().body(response);
         }
         
-        try {
-            String username = jwtTokenUtil.getUsernameFromToken(refreshToken);
-            
-            if (!jwtTokenUtil.canTokenBeRefreshed(refreshToken)) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("status", "error");
-                response.put("message", "刷新令牌已过期");
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
-            }
-            
-            // 获取用户信息
-            Optional<User> userOpt = userService.findByUsername(username);
-            if (!userOpt.isPresent()) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("status", "error");
-                response.put("message", "用户不存在");
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
-            }
-            
-            User user = userOpt.get();
-            
-            // 检查用户状态
-            if (!user.isEnabled()) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("status", "error");
-                response.put("message", "账户已被禁用");
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-            }
-            
-            if (user.isLocked()) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("status", "error");
-                response.put("message", "账户已被锁定");
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-            }
-            
-            final UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-            
-            // 准备额外的声明信息
-            Map<String, Object> additionalClaims = new HashMap<>();
-            additionalClaims.put("userId", user.getId());
-            additionalClaims.put("email", user.getEmail());
-            
-            // 添加角色信息
-            List<String> roles = user.getRoles().stream()
-                    .map(Role::getName)
-                    .collect(Collectors.toList());
-            additionalClaims.put("roles", roles);
-            
-            // 添加权限信息 - 使用Set去重
-            Set<String> permissionSet = new HashSet<>();
-            for (Role role : user.getRoles()) {
-                for (Permission permission : role.getPermissions()) {
-                    permissionSet.add(permission.getPermission());
-                }
-            }
-            additionalClaims.put("permissions", new ArrayList<>(permissionSet));
-            additionalClaims.put("lastLoginTime", user.getLastLoginTime().getTime());
-            
-            // 生成新令牌
-            final String newToken = jwtTokenUtil.generateToken(userDetails, additionalClaims);
-            // 生成新的刷新令牌，增强安全性
-            final String newRefreshToken = jwtTokenUtil.generateRefreshToken(userDetails);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("status", "success");
-            response.put("message", "令牌刷新成功");
-            response.put("token", newToken);
-            response.put("refreshToken", newRefreshToken);
-            response.put("tokenType", "Bearer");
-            response.put("expiresIn", jwtTokenUtil.getExpirationDateFromToken(newToken).getTime() / 1000);
-            
-            // 构建用户信息响应
-            Map<String, Object> userInfo = buildUserInfoResponse(user);
-            response.put("user", userInfo);
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("status", "error");
-            response.put("message", "刷新令牌无效: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
-        }
-    }
-    
-    /**
-     * 验证令牌
-     * @param tokenRequest 令牌请求
-     * @return 验证结果
-     */
-    @PostMapping("/validate-token")
-    public ResponseEntity<?> validateToken(@RequestBody Map<String, String> tokenRequest) {
-        String token = tokenRequest.get("token");
+        HttpSession session = request.getSession();
+        String ipAddress = getClientIpAddress(request, forwardedIp, realIp);
         
+        // 检查是否需要验证码 (基于Session中的失败记录或用户状态，此处简化，先尝试认证)
+        // boolean requiresCaptcha = checkCaptchaRequirement(usernameOrEmail, session);
+        boolean requiresCaptchaCheckPostFailure = true; // 标记是否需要在认证失败后检查验证码需求
+        boolean captchaVerified = false; // 标记验证码是否已验证（如果需要的话）
+
+        // 尝试从数据库获取用户信息，以判断是否一开始就需要验证码（例如账户已锁定）
+        Optional<User> initialUserOptional = userService.findByUsernameOrEmail(usernameOrEmail);
+        if (initialUserOptional.isPresent()) {
+            User initialUser = initialUserOptional.get();
+            if (initialUser.isLocked() || initialUser.getLoginFailCount() >= 3) { // 假设失败3次或已锁定则需要验证码
+                String sessionCaptcha = (String) session.getAttribute("captchaCode");
+                Long captchaExpireTime = (Long) session.getAttribute("captchaExpireTime");
+
+                if (captcha == null || captcha.trim().isEmpty()) {
+                    response.put("status", "error");
+                    response.put("message", "请输入验证码");
+                    response.put("captchaRequired", true);
+                    return ResponseEntity.badRequest().body(response);
+                }
+                if (sessionCaptcha == null || captchaExpireTime == null || System.currentTimeMillis() > captchaExpireTime) {
+                    response.put("status", "error");
+                    response.put("message", "验证码已过期，请重新获取");
+                    response.put("captchaRequired", true);
+                    return ResponseEntity.badRequest().body(response);
+                }
+                if (!sessionCaptcha.equalsIgnoreCase(captcha)) {
+                    response.put("status", "error");
+                    response.put("message", "验证码错误");
+                    response.put("captchaRequired", true);
+                    return ResponseEntity.badRequest().body(response);
+                }
+                // 验证码验证成功
+                session.removeAttribute("captchaCode");
+                session.removeAttribute("captchaExpireTime");
+                captchaVerified = true;
+                requiresCaptchaCheckPostFailure = false; // 初始验证码已通过，失败后无需再次检查
+            }
+        }
+
         try {
-            // 从令牌中获取用户名
-            String username = jwtTokenUtil.getUsernameFromToken(token);
-            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-            
-            // 验证令牌有效性
-            boolean isValid = jwtTokenUtil.validateToken(token, userDetails);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("valid", isValid);
-            
-            if (isValid) {
-                response.put("username", username);
-                Optional<User> userOpt = userService.findByUsername(username);
-                userOpt.ifPresent(user -> {
-                    // 添加用户基本信息
-                    Map<String, Object> userInfo = new HashMap<>();
-                    userInfo.put("id", user.getId());
-                    userInfo.put("username", user.getUsername());
-                    userInfo.put("email", user.getEmail());
-                    userInfo.put("fullName", user.getFullName());
-                    userInfo.put("lastLoginTime", user.getLastLoginTime());
-                    
-                    // 添加角色信息
-                    List<String> roles = user.getRoles().stream()
-                            .map(Role::getName)
-                            .collect(Collectors.toList());
-                    userInfo.put("roles", roles);
-                    
-                    // 添加权限信息 - 使用Set去重
-                    Set<String> permissionSet = new HashSet<>();
-                    for (Role role : user.getRoles()) {
-                        for (Permission permission : role.getPermissions()) {
-                            permissionSet.add(permission.getPermission());
-                        }
-                    }
-                    userInfo.put("permissions", new ArrayList<>(permissionSet));
-                    
-                    response.put("user", userInfo);
-                });
-                
-                // 添加令牌过期时间
-                response.put("expiresAt", jwtTokenUtil.getExpirationDateFromToken(token));
+            // 使用用户名进行认证
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(usernameOrEmail, password)
+            );
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+
+            // 获取认证成功的用户信息
+            final UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+            // 使用 UserServiceImpl 的 login 方法处理成功逻辑（重置计数、记录日志等）
+            Optional<User> loggedInUserOptional = userService.login(userDetails.getUsername(), password, ipAddress, userAgent);
+
+            if (!loggedInUserOptional.isPresent()) {
+                 // login 方法内部已处理失败情况，理论上认证成功后这里应该总是有用户
+                 // 但为保险起见，添加错误处理
+                 log.error("Login successful via AuthenticationManager but UserServiceImpl.login failed for {}", userDetails.getUsername());
+                 response.put("status", "error");
+                 response.put("message", "登录处理失败，请联系管理员");
+                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
             }
             
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("valid", false);
-            response.put("message", "令牌无效或已过期");
-            return ResponseEntity.ok(response);
-        }
-    }
+            User loggedInUser = loggedInUserOptional.get();
+            
+            // UserServiceImpl.login 已记录成功日志，此处无需重复记录
+            // UserLog log = UserLog.createLoginSuccessLog(loggedInUser.getId(), loggedInUser.getUsername(), ipAddress, userAgent);
+            // userService.saveUserLog(log); 
 
-    /**
-     * 验证用户凭证
-     * @param username 用户名
-     * @param password 密码
-     * @throws Exception 认证异常
-     */
-    private void authenticate(String username, String password) throws Exception {
-        try {
-            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
-        } catch (DisabledException e) {
-            throw new DisabledException("用户已禁用", e); // 保持原始异常类型
+            // 生成令牌
+            final String token = jwtTokenUtil.generateToken(userDetails);
+            final String refreshToken = jwtTokenUtil.generateRefreshToken(userDetails);
+
+            // 构建成功响应
+            response.put("status", "success");
+            response.put("token", token);
+            response.put("refreshToken", refreshToken);
+            response.put("message", "登录成功");
+            
+            Map<String, Object> userInfo = new HashMap<>();
+            userInfo.put("id", loggedInUser.getId());
+            userInfo.put("username", loggedInUser.getUsername());
+            userInfo.put("email", loggedInUser.getEmail());
+            // 确保返回的是角色名称列表
+            userInfo.put("roles", loggedInUser.getRoles() != null ? 
+                                    loggedInUser.getRoles().stream().map(Role::getName).collect(Collectors.toList()) : 
+                                    Collections.emptyList()); 
+            response.put("user", userInfo);
+
+            return ResponseEntity.ok(response);
+
         } catch (BadCredentialsException e) {
-            throw new BadCredentialsException("用户名或密码错误", e); // 保持原始异常类型
-        } catch (LockedException e) { // Added catch block for LockedException
-            throw new LockedException("账户已锁定", e);
+            // 密码错误 - UserServiceImpl.login 已处理失败计数和日志
+            response.put("status", "error");
+            response.put("message", "用户名或密码错误");
+            // 认证失败后检查是否需要验证码
+            checkAndSetCaptchaRequired(usernameOrEmail, response);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (LockedException e) {
+            // 账户锁定 - UserServiceImpl.login 已处理日志
+            response.put("status", "error");
+            response.put("message", "账户已锁定");
+            response.put("captchaRequired", true); // 账户锁定时强制要求验证码
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (DisabledException e) {
+            // 账户禁用 - UserServiceImpl.login 已处理日志
+            response.put("status", "error");
+            response.put("message", "账户已禁用");
+            // 禁用的账户通常不需要验证码，但可以根据策略调整
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (UsernameNotFoundException e) {
+            // 用户名不存在 - UserServiceImpl.login 已处理日志
+            response.put("status", "error");
+            response.put("message", "用户名或邮箱不存在");
+            // 用户不存在时通常不需要验证码
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
         } catch (AuthenticationException e) {
-             // 捕获更具体的 AuthenticationException
-             throw new Exception("认证失败: " + e.getMessage(), e);
+            // 其他认证异常
+            log.error("Authentication failed for user {}: {}", usernameOrEmail, e.getMessage());
+            response.put("status", "error");
+            response.put("message", "认证失败: " + e.getMessage());
+            // 认证失败后检查是否需要验证码
+            checkAndSetCaptchaRequired(usernameOrEmail, response);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
         } catch (Exception e) {
-            // 其他未知异常
-            throw new Exception("认证过程中发生未知错误", e);
+            // 其他未知错误
+            log.error("Login error for user {}: {}", usernameOrEmail, e.getMessage(), e);
+            response.put("status", "error");
+            response.put("message", "登录过程中发生内部错误");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
-    
+
     /**
-     * 处理认证异常
-     * @param e 异常
-     * @return 错误响应
+     * 检查用户状态并设置 captchaRequired 标志
+     * @param usernameOrEmail 用户名或邮箱
+     * @param response 响应Map
      */
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<?> handleAuthenticationException(Exception e) {
-        Map<String, String> response = new HashMap<>();
-        response.put("message", e.getMessage());
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
-    }
-
-
-    private void incrementLoginAttempts(HttpSession session, String keyPrefix) {
-        Integer attempts = (Integer) session.getAttribute(keyPrefix);
-        if (attempts == null) {
-            attempts = 0;
+    private void checkAndSetCaptchaRequired(String usernameOrEmail, Map<String, Object> response) {
+        Optional<User> userOptional = userService.findByUsernameOrEmail(usernameOrEmail);
+        if (userOptional.isPresent()) {
+            User user = userOptional.get();
+            // 根据失败次数决定是否需要验证码 (假设失败3次后需要)
+            if (user.getLoginFailCount() >= 3) { 
+                response.put("captchaRequired", true);
+            }
         }
-        session.setAttribute(keyPrefix, attempts + 1);
+        // 如果用户不存在，则不设置 captchaRequired
     }
+
+    /**
+     * 获取客户端IP地址
+     * @param request HTTP请求
+     * @param forwardedIp X-Forwarded-For头
+     * @param realIp X-Real-IP头
+     * @return IP地址
+     */
+    private String getClientIpAddress(HttpServletRequest request, String forwardedIp, String realIp) {
+        String ipAddress = realIp; // 优先使用 X-Real-IP
+        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+            ipAddress = forwardedIp; // 其次使用 X-Forwarded-For
+        }
+        if (ipAddress != null && !ipAddress.isEmpty() && !"unknown".equalsIgnoreCase(ipAddress)) {
+            // X-Forwarded-For 可能包含多个IP，取第一个
+            int commaIndex = ipAddress.indexOf(',');
+            if (commaIndex != -1) {
+                ipAddress = ipAddress.substring(0, commaIndex);
+            }
+        }
+        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+            ipAddress = request.getRemoteAddr(); // 最后使用 request.getRemoteAddr()
+        }
+        return ipAddress;
+    }
+
+    // 移除 handleLoginFailure 方法，逻辑已整合到 catch 块和 checkAndSetCaptchaRequired
+    /*
+    private void handleLoginFailure(String usernameOrEmail, String ipAddress, String userAgent, String reason, Map<String, Object> response) {
+        ...
+    }
+    */
+
+// ... existing code ...
+    /**
+     * 用户登录
+     * @param authRequest 登录请求
+     * @return JWT令牌
+     */
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody Map<String, String> authRequest, 
+                                  @RequestHeader(value = "X-Forwarded-For", required = false) String forwardedIp,
+                                  @RequestHeader(value = "User-Agent", required = false) String userAgent,
+                                  @RequestHeader(value = "X-Real-IP", required = false) String realIp,
+                                  HttpServletRequest request) {
+        String usernameOrEmail = authRequest.get("username");
+        String password = authRequest.get("password");
+        String captcha = authRequest.get("captcha");
+        
+        Map<String, Object> response = new HashMap<>();
+
+        // 参数验证
+        if (usernameOrEmail == null || usernameOrEmail.trim().isEmpty() || 
+            password == null || password.trim().isEmpty()) {
+            response.put("status", "error");
+            response.put("message", "用户名/邮箱和密码不能为空");
+            return ResponseEntity.badRequest().body(response);
+        }
+        
+        HttpSession session = request.getSession();
+        String ipAddress = getClientIpAddress(request, forwardedIp, realIp);
+        
+        // 检查是否需要验证码 (基于Session中的失败记录或用户状态，此处简化，先尝试认证)
+        // boolean requiresCaptcha = checkCaptchaRequirement(usernameOrEmail, session);
+        boolean requiresCaptchaCheckPostFailure = true; // 标记是否需要在认证失败后检查验证码需求
+        boolean captchaVerified = false; // 标记验证码是否已验证（如果需要的话）
+
+        // 尝试从数据库获取用户信息，以判断是否一开始就需要验证码（例如账户已锁定）
+        Optional<User> initialUserOptional = userService.findByUsernameOrEmail(usernameOrEmail);
+        if (initialUserOptional.isPresent()) {
+            User initialUser = initialUserOptional.get();
+            if (initialUser.isLocked() || initialUser.getLoginFailCount() >= 3) { // 假设失败3次或已锁定则需要验证码
+                String sessionCaptcha = (String) session.getAttribute("captchaCode");
+                Long captchaExpireTime = (Long) session.getAttribute("captchaExpireTime");
+
+                if (captcha == null || captcha.trim().isEmpty()) {
+                    response.put("status", "error");
+                    response.put("message", "请输入验证码");
+                    response.put("captchaRequired", true);
+                    return ResponseEntity.badRequest().body(response);
+                }
+                if (sessionCaptcha == null || captchaExpireTime == null || System.currentTimeMillis() > captchaExpireTime) {
+                    response.put("status", "error");
+                    response.put("message", "验证码已过期，请重新获取");
+                    response.put("captchaRequired", true);
+                    return ResponseEntity.badRequest().body(response);
+                }
+                if (!sessionCaptcha.equalsIgnoreCase(captcha)) {
+                    response.put("status", "error");
+                    response.put("message", "验证码错误");
+                    response.put("captchaRequired", true);
+                    return ResponseEntity.badRequest().body(response);
+                }
+                // 验证码验证成功
+                session.removeAttribute("captchaCode");
+                session.removeAttribute("captchaExpireTime");
+                captchaVerified = true;
+                requiresCaptchaCheckPostFailure = false; // 初始验证码已通过，失败后无需再次检查
+            }
+        }
+
+        try {
+            // 使用用户名进行认证
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(usernameOrEmail, password)
+            );
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+
+            // 获取认证成功的用户信息
+            final UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+            // 使用 UserServiceImpl 的 login 方法处理成功逻辑（重置计数、记录日志等）
+            Optional<User> loggedInUserOptional = userService.login(userDetails.getUsername(), password, ipAddress, userAgent);
+
+            if (!loggedInUserOptional.isPresent()) {
+                 // login 方法内部已处理失败情况，理论上认证成功后这里应该总是有用户
+                 // 但为保险起见，添加错误处理
+                 log.error("Login successful via AuthenticationManager but UserServiceImpl.login failed for {}", userDetails.getUsername());
+                 response.put("status", "error");
+                 response.put("message", "登录处理失败，请联系管理员");
+                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            }
+            
+            User loggedInUser = loggedInUserOptional.get();
+            
+            // UserServiceImpl.login 已记录成功日志，此处无需重复记录
+            // UserLog log = UserLog.createLoginSuccessLog(loggedInUser.getId(), loggedInUser.getUsername(), ipAddress, userAgent);
+            // userService.saveUserLog(log); 
+
+            // 生成令牌
+            final String token = jwtTokenUtil.generateToken(userDetails);
+            final String refreshToken = jwtTokenUtil.generateRefreshToken(userDetails);
+
+            // 构建成功响应
+            response.put("status", "success");
+            response.put("token", token);
+            response.put("refreshToken", refreshToken);
+            response.put("message", "登录成功");
+            
+            Map<String, Object> userInfo = new HashMap<>();
+            userInfo.put("id", loggedInUser.getId());
+            userInfo.put("username", loggedInUser.getUsername());
+            userInfo.put("email", loggedInUser.getEmail());
+            // 确保返回的是角色名称列表
+            userInfo.put("roles", loggedInUser.getRoles() != null ? 
+                                    loggedInUser.getRoles().stream().map(Role::getName).collect(Collectors.toList()) : 
+                                    Collections.emptyList()); 
+            response.put("user", userInfo);
+
+            return ResponseEntity.ok(response);
+
+        } catch (BadCredentialsException e) {
+            // 密码错误 - UserServiceImpl.login 已处理失败计数和日志
+            response.put("status", "error");
+            response.put("message", "用户名或密码错误");
+            // 认证失败后检查是否需要验证码
+            checkAndSetCaptchaRequired(usernameOrEmail, response);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (LockedException e) {
+            // 账户锁定 - UserServiceImpl.login 已处理日志
+            response.put("status", "error");
+            response.put("message", "账户已锁定");
+            response.put("captchaRequired", true); // 账户锁定时强制要求验证码
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (DisabledException e) {
+            // 账户禁用 - UserServiceImpl.login 已处理日志
+            response.put("status", "error");
+            response.put("message", "账户已禁用");
+            // 禁用的账户通常不需要验证码，但可以根据策略调整
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (UsernameNotFoundException e) {
+            // 用户名不存在 - UserServiceImpl.login 已处理日志
+            response.put("status", "error");
+            response.put("message", "用户名或邮箱不存在");
+            // 用户不存在时通常不需要验证码
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (AuthenticationException e) {
+            // 其他认证异常
+            log.error("Authentication failed for user {}: {}", usernameOrEmail, e.getMessage());
+            response.put("status", "error");
+            response.put("message", "认证失败: " + e.getMessage());
+            // 认证失败后检查是否需要验证码
+            checkAndSetCaptchaRequired(usernameOrEmail, response);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (Exception e) {
+            // 其他未知错误
+            log.error("Login error for user {}: {}", usernameOrEmail, e.getMessage(), e);
+            response.put("status", "error");
+            response.put("message", "登录过程中发生内部错误");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    /**
+     * 检查用户状态并设置 captchaRequired 标志
+     * @param usernameOrEmail 用户名或邮箱
+     * @param response 响应Map
+     */
+    private void checkAndSetCaptchaRequired(String usernameOrEmail, Map<String, Object> response) {
+        Optional<User> userOptional = userService.findByUsernameOrEmail(usernameOrEmail);
+        if (userOptional.isPresent()) {
+            User user = userOptional.get();
+            // 根据失败次数决定是否需要验证码 (假设失败3次后需要)
+            if (user.getLoginFailCount() >= 3) { 
+                response.put("captchaRequired", true);
+            }
+        }
+        // 如果用户不存在，则不设置 captchaRequired
+    }
+
+    /**
+     * 获取客户端IP地址
+     * @param request HTTP请求
+     * @param forwardedIp X-Forwarded-For头
+     * @param realIp X-Real-IP头
+     * @return IP地址
+     */
+    private String getClientIpAddress(HttpServletRequest request, String forwardedIp, String realIp) {
+        String ipAddress = realIp; // 优先使用 X-Real-IP
+        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+            ipAddress = forwardedIp; // 其次使用 X-Forwarded-For
+        }
+        if (ipAddress != null && !ipAddress.isEmpty() && !"unknown".equalsIgnoreCase(ipAddress)) {
+            // X-Forwarded-For 可能包含多个IP，取第一个
+            int commaIndex = ipAddress.indexOf(',');
+            if (commaIndex != -1) {
+                ipAddress = ipAddress.substring(0, commaIndex);
+            }
+        }
+        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+            ipAddress = request.getRemoteAddr(); // 最后使用 request.getRemoteAddr()
+        }
+        return ipAddress;
+    }
+
+    // 移除 handleLoginFailure 方法，逻辑已整合到 catch 块和 checkAndSetCaptchaRequired
+    /*
+    private void handleLoginFailure(String usernameOrEmail, String ipAddress, String userAgent, String reason, Map<String, Object> response) {
+        ...
+    }
+    */
+    /**
+     * 用户登录
+     * @param authRequest 登录请求
+     * @return JWT令牌
+     */
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody Map<String, String> authRequest, 
+                                  @RequestHeader(value = "X-Forwarded-For", required = false) String forwardedIp,
+                                  @RequestHeader(value = "User-Agent", required = false) String userAgent,
+                                  @RequestHeader(value = "X-Real-IP", required = false) String realIp,
+                                  HttpServletRequest request) {
+        String usernameOrEmail = authRequest.get("username");
+        String password = authRequest.get("password");
+        String captcha = authRequest.get("captcha");
+        
+        Map<String, Object> response = new HashMap<>();
+
+        // 参数验证
+        if (usernameOrEmail == null || usernameOrEmail.trim().isEmpty() || 
+            password == null || password.trim().isEmpty()) {
+            response.put("status", "error");
+            response.put("message", "用户名/邮箱和密码不能为空");
+            return ResponseEntity.badRequest().body(response);
+        }
+        
+        HttpSession session = request.getSession();
+        String ipAddress = getClientIpAddress(request, forwardedIp, realIp);
+        
+        // 检查是否需要验证码 (基于Session中的失败记录或用户状态，此处简化，先尝试认证)
+        // boolean requiresCaptcha = checkCaptchaRequirement(usernameOrEmail, session);
+        boolean requiresCaptchaCheckPostFailure = true; // 标记是否需要在认证失败后检查验证码需求
+        boolean captchaVerified = false; // 标记验证码是否已验证（如果需要的话）
+
+        // 尝试从数据库获取用户信息，以判断是否一开始就需要验证码（例如账户已锁定）
+        Optional<User> initialUserOptional = userService.findByUsernameOrEmail(usernameOrEmail);
+        if (initialUserOptional.isPresent()) {
+            User initialUser = initialUserOptional.get();
+            if (initialUser.isLocked() || initialUser.getLoginFailCount() >= 3) { // 假设失败3次或已锁定则需要验证码
+                String sessionCaptcha = (String) session.getAttribute("captchaCode");
+                Long captchaExpireTime = (Long) session.getAttribute("captchaExpireTime");
+
+                if (captcha == null || captcha.trim().isEmpty()) {
+                    response.put("status", "error");
+                    response.put("message", "请输入验证码");
+                    response.put("captchaRequired", true);
+                    return ResponseEntity.badRequest().body(response);
+                }
+                if (sessionCaptcha == null || captchaExpireTime == null || System.currentTimeMillis() > captchaExpireTime) {
+                    response.put("status", "error");
+                    response.put("message", "验证码已过期，请重新获取");
+                    response.put("captchaRequired", true);
+                    return ResponseEntity.badRequest().body(response);
+                }
+                if (!sessionCaptcha.equalsIgnoreCase(captcha)) {
+                    response.put("status", "error");
+                    response.put("message", "验证码错误");
+                    response.put("captchaRequired", true);
+                    return ResponseEntity.badRequest().body(response);
+                }
+                // 验证码验证成功
+                session.removeAttribute("captchaCode");
+                session.removeAttribute("captchaExpireTime");
+                captchaVerified = true;
+                requiresCaptchaCheckPostFailure = false; // 初始验证码已通过，失败后无需再次检查
+            }
+        }
+
+        try {
+            // 使用用户名进行认证
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(usernameOrEmail, password)
+            );
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+
+            // 获取认证成功的用户信息
+            final UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+            // 使用 UserServiceImpl 的 login 方法处理成功逻辑（重置计数、记录日志等）
+            Optional<User> loggedInUserOptional = userService.login(userDetails.getUsername(), password, ipAddress, userAgent);
+
+            if (!loggedInUserOptional.isPresent()) {
+                 // login 方法内部已处理失败情况，理论上认证成功后这里应该总是有用户
+                 // 但为保险起见，添加错误处理
+                 log.error("Login successful via AuthenticationManager but UserServiceImpl.login failed for {}", userDetails.getUsername());
+                 response.put("status", "error");
+                 response.put("message", "登录处理失败，请联系管理员");
+                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            }
+            
+            User loggedInUser = loggedInUserOptional.get();
+            
+            // UserServiceImpl.login 已记录成功日志，此处无需重复记录
+            // UserLog log = UserLog.createLoginSuccessLog(loggedInUser.getId(), loggedInUser.getUsername(), ipAddress, userAgent);
+            // userService.saveUserLog(log); 
+
+            // 生成令牌
+            final String token = jwtTokenUtil.generateToken(userDetails);
+            final String refreshToken = jwtTokenUtil.generateRefreshToken(userDetails);
+
+            // 构建成功响应
+            response.put("status", "success");
+            response.put("token", token);
+            response.put("refreshToken", refreshToken);
+            response.put("message", "登录成功");
+            
+            Map<String, Object> userInfo = new HashMap<>();
+            userInfo.put("id", loggedInUser.getId());
+            userInfo.put("username", loggedInUser.getUsername());
+            userInfo.put("email", loggedInUser.getEmail());
+            // 确保返回的是角色名称列表
+            userInfo.put("roles", loggedInUser.getRoles() != null ? 
+                                    loggedInUser.getRoles().stream().map(Role::getName).collect(Collectors.toList()) : 
+                                    Collections.emptyList()); 
+            response.put("user", userInfo);
+
+            return ResponseEntity.ok(response);
+
+        } catch (BadCredentialsException e) {
+            // 密码错误 - UserServiceImpl.login 已处理失败计数和日志
+            response.put("status", "error");
+            response.put("message", "用户名或密码错误");
+            // 认证失败后检查是否需要验证码
+            checkAndSetCaptchaRequired(usernameOrEmail, response);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (LockedException e) {
+            // 账户锁定 - UserServiceImpl.login 已处理日志
+            response.put("status", "error");
+            response.put("message", "账户已锁定");
+            response.put("captchaRequired", true); // 账户锁定时强制要求验证码
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (DisabledException e) {
+            // 账户禁用 - UserServiceImpl.login 已处理日志
+            response.put("status", "error");
+            response.put("message", "账户已禁用");
+            // 禁用的账户通常不需要验证码，但可以根据策略调整
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (UsernameNotFoundException e) {
+            // 用户名不存在 - UserServiceImpl.login 已处理日志
+            response.put("status", "error");
+            response.put("message", "用户名或邮箱不存在");
+            // 用户不存在时通常不需要验证码
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (AuthenticationException e) {
+            // 其他认证异常
+            log.error("Authentication failed for user {}: {}", usernameOrEmail, e.getMessage());
+            response.put("status", "error");
+            response.put("message", "认证失败: " + e.getMessage());
+            // 认证失败后检查是否需要验证码
+            checkAndSetCaptchaRequired(usernameOrEmail, response);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (Exception e) {
+            // 其他未知错误
+            log.error("Login error for user {}: {}", usernameOrEmail, e.getMessage(), e);
+            response.put("status", "error");
+            response.put("message", "登录过程中发生内部错误");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    /**
+     * 检查用户状态并设置 captchaRequired 标志
+     * @param usernameOrEmail 用户名或邮箱
+     * @param response 响应Map
+     */
+    private void checkAndSetCaptchaRequired(String usernameOrEmail, Map<String, Object> response) {
+        Optional<User> userOptional = userService.findByUsernameOrEmail(usernameOrEmail);
+        if (userOptional.isPresent()) {
+            User user = userOptional.get();
+            // 根据失败次数决定是否需要验证码 (假设失败3次后需要)
+            if (user.getLoginFailCount() >= 3) { 
+                response.put("captchaRequired", true);
+            }
+        }
+        // 如果用户不存在，则不设置 captchaRequired
+    }
+
+    /**
+     * 获取客户端IP地址
+     * @param request HTTP请求
+     * @param forwardedIp X-Forwarded-For头
+     * @param realIp X-Real-IP头
+     * @return IP地址
+     */
+    private String getClientIpAddress(HttpServletRequest request, String forwardedIp, String realIp) {
+        String ipAddress = realIp; // 优先使用 X-Real-IP
+        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+            ipAddress = forwardedIp; // 其次使用 X-Forwarded-For
+        }
+        if (ipAddress != null && !ipAddress.isEmpty() && !"unknown".equalsIgnoreCase(ipAddress)) {
+            // X-Forwarded-For 可能包含多个IP，取第一个
+            int commaIndex = ipAddress.indexOf(',');
+            if (commaIndex != -1) {
+                ipAddress = ipAddress.substring(0, commaIndex);
+            }
+        }
+        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+            ipAddress = request.getRemoteAddr(); // 最后使用 request.getRemoteAddr()
+        }
+        return ipAddress;
+    }
+
+    // 移除 handleLoginFailure 方法，逻辑已整合到 catch 块和 checkAndSetCaptchaRequired
+    /*
+    private void handleLoginFailure(String usernameOrEmail, String ipAddress, String userAgent, String reason, Map<String, Object> response) {
+        ...
+    }
+    */
 }
