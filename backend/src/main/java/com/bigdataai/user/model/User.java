@@ -324,20 +324,14 @@ public class User {
     }
 
     // Explicit Getters to ensure compilation
-    public String getUsername() {
-        return username;
-    }
-
-    public String getEmail() {
-        return email;
-    }
+    // Duplicates removed as Lombok @Data handles getters
     
     /**
      * 锁定账户
      */
     public void lock() {
         this.locked = true;
-        this.lockedTime = new Date();
+        this.lockTime = new Date(); // Corrected field name
     }
     
     /**
@@ -345,7 +339,7 @@ public class User {
      */
     public void unlock() {
         this.locked = false;
-        this.lockedTime = null;
+        this.lockTime = null; // Corrected field name
         resetLoginFailCount();
     }
 }

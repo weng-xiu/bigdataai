@@ -1386,20 +1386,6 @@ public class DataProcessingServiceImpl implements DataProcessingService {
                             .option("es.port", dataSource.getProperties().get("port"))
                             .option("es.resource", tableName)
                             .load();
-                case MONGODB:
-                    return sparkSession.read()
-                            .format("mongo")
-                            .option("uri", dataSource.getConnectionUrl())
-                            .option("database", dataSource.getProperties().get("database"))
-                            .option("collection", tableName)
-                            .load();
-                case ELASTICSEARCH:
-                    return sparkSession.read()
-                            .format("org.elasticsearch.spark.sql")
-                            .option("es.nodes", dataSource.getConnectionUrl())
-                            .option("es.port", dataSource.getProperties().get("port"))
-                            .option("es.resource", tableName)
-                            .load();
                 case HDFS:
                     String format = dataSource.getProperties().get("format");
                     if (format == null) {

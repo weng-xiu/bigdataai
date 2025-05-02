@@ -230,9 +230,7 @@ public class DataCollectionTask {
         return enabled;
     }
 
-    public void setLastExecutionTime(Date lastExecutionTime) {
-        this.lastExecutionTime = lastExecutionTime;
-    }
+    // Duplicate setLastExecutionTime removed, handled by @Data
 
     public String getSourceTable() {
         return sourceTable;
