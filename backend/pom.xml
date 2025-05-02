@@ -30,6 +30,7 @@
         <fastjson.version>2.0.7</fastjson.version>
         <commons-lang3.version>3.12.0</commons-lang3.version>
         <jjwt.version>0.9.1</jjwt.version>
+        <lombok.version>1.18.24</lombok.version> <!-- Added Lombok version -->
         <mongodb.version>4.6.1</mongodb.version>
         <kafka.version>3.1.0</kafka.version>
         <mybatis-plus.version>3.5.2</mybatis-plus.version>
@@ -146,7 +147,7 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <optional>true</optional>
+            <!-- <optional>true</optional> --> <!-- Removed optional tag -->
         </dependency>
         <dependency>
             <groupId>com.alibaba</groupId>
@@ -198,7 +199,21 @@
                 <configuration>
                     <source>1.8</source>
                     <target>1.8</target>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version> <!-- Ensure lombok.version property is defined or use a specific version -->
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.projectlombok</groupId>
+                        <artifactId>lombok</artifactId>
+                        <version>${lombok.version}</version>
+                    </dependency>
+                </dependencies>
             </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

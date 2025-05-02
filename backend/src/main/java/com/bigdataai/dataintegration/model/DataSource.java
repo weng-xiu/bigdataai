@@ -49,6 +49,23 @@ public class DataSource {
         return connectionUrl;
     }
 
+    // Explicit Setters to fix compilation errors
+    /**
+     * 设置数据源类型
+     * @param type 数据源类型
+     */
+    public void setType(DataSourceType type) { // Renamed from setDataSourceType
+        this.type = type;
+    }
+
+    /**
+     * 设置连接 URL
+     * @param connectionUrl 连接 URL
+     */
+    public void setConnectionUrl(String connectionUrl) {
+        this.connectionUrl = connectionUrl;
+    }
+
     public String getUsername() {
         return username;
     }
@@ -59,5 +76,39 @@ public class DataSource {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    // Explicit Setters to ensure compilation
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public Boolean getEnabled() {
+        return enabled;
+    }
+
+    // Explicit Setters to ensure compilation
+    public void setEnabled(Boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public void setUpdateTime(Date updateTime) {
+        this.updateTime = updateTime;
     }
 }

@@ -49,7 +49,38 @@ public class User {
     /**
      * 账户锁定时间
      */
-    private Date lockedTime;
+    private Date lockTime;
+    
+    @TableField(exist = false)
+    private Set<String> roles = new HashSet<>();
+    
+    @TableField(exist = false)
+    private Set<String> permissions = new HashSet<>();
+
+    // Explicit Getters and Setters to fix compilation errors
+    /**
+     * 获取密码
+     * @return 密码
+     */
+    public String getPassword() {
+        return password;
+    }
+
+    /**
+     * 设置创建时间
+     * @param createTime 创建时间
+     */
+    public void setCreateTime(Date createTime) {
+        this.createTime = createTime;
+    }
+
+    /**
+     * 设置登录失败次数
+     * @param loginFailCount 登录失败次数
+     */
+    public void setLoginFailCount(Integer loginFailCount) {
+        this.loginFailCount = loginFailCount;
+    }
     
     /**
      * 用户角色关系需要通过中间表手动管理
@@ -98,6 +129,15 @@ public class User {
      */
     public void resetLoginFailCount() {
         this.loginFailCount = 0;
+    }
+
+    // Explicit Getters to ensure compilation
+    public String getUsername() {
+        return username;
+    }
+
+    public String getEmail() {
+        return email;
     }
     
     /**

@@ -77,4 +77,20 @@ public class DataCollectionTask {
     public String getSourceTable() {
         return sourceTable;
     }
+
+    public String getQueryCondition() {
+        return queryCondition;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public String getCronExpression() {
+        return cronExpression;
+    }
+
+    public String getStatus() {
+        return status;
+    }
 }
