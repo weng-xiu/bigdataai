@@ -456,32 +456,9 @@ public class AuthController {
      * 检查用户状态并设置 captchaRequired 标志
 
 
-    /**
-     * 获取客户端IP地址
-     * @param request HTTP请求
-     * @param forwardedIp X-Forwarded-For头
-     * @param realIp X-Real-IP头
-     * @return IP地址
-     */
-    private String getClientIpAddress(HttpServletRequest request, String forwardedIp, String realIp) {
-        String ipAddress = realIp; // 优先使用 X-Real-IP
-        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
-            ipAddress = forwardedIp; // 其次使用 X-Forwarded-For
-        }
-        if (ipAddress != null && !ipAddress.isEmpty() && !"unknown".equalsIgnoreCase(ipAddress)) {
-            // X-Forwarded-For 可能包含多个IP，取第一个
-            int commaIndex = ipAddress.indexOf(',');
-            if (commaIndex != -1) {
-                ipAddress = ipAddress.substring(0, commaIndex);
-            }
-        }
-        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
-            ipAddress = request.getRemoteAddr(); // 最后使用 request.getRemoteAddr()
-        }
-        return ipAddress;
-    }
 
-    // 移除 handleLoginFailure 方法，逻辑已整合到 catch 块和 checkAndSetCaptchaRequired
+
+    // 移除重复的 getClientIpAddress 方法
     /*
     private void handleLoginFailure(String usernameOrEmail, String ipAddress, String userAgent, String reason, Map<String, Object> response) {
         ...
