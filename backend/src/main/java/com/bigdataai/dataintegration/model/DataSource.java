@@ -19,7 +19,39 @@ public class DataSource {
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
     
+    /**
+     * 获取数据源ID
+     * @return 数据源ID
+     */
+    public Long getId() {
+        return id;
+    }
+
+    /**
+     * 设置数据源ID
+     * @param id 数据源ID
+     */
+    public void setId(Long id) {
+        this.id = id;
+    }
+    
     private String name;
+
+    /**
+     * 获取数据源名称
+     * @return 数据源名称
+     */
+    public String getName() {
+        return name;
+    }
+
+    /**
+     * 设置数据源名称
+     * @param name 数据源名称
+     */
+    public void setName(String name) {
+        this.name = name;
+    }
     
     private DataSourceType type;
     
@@ -37,6 +69,22 @@ public class DataSource {
     private Boolean enabled = true;
     
     private Date createTime;
+
+    /**
+     * 获取创建时间
+     * @return 创建时间
+     */
+    public Date getCreateTime() {
+        return createTime;
+    }
+
+    /**
+     * 设置创建时间
+     * @param createTime 创建时间
+     */
+    public void setCreateTime(Date createTime) {
+        this.createTime = createTime;
+    }
     
     private Date updateTime;
 

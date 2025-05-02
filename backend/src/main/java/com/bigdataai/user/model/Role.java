@@ -63,6 +63,14 @@ public class Role {
     private Set<Permission> permissions = new HashSet<>();
 
     /**
+     * 获取角色权限集合
+     * @return 角色权限集合
+     */
+    public Set<Permission> getPermissions() {
+        return permissions;
+    }
+
+    /**
      * 设置角色权限集合
      * @param permissions 角色权限集合
      */

@@ -366,7 +366,7 @@ public class UserServiceImpl implements UserService {
         
         return user.getRoles().stream()
                 .flatMap(role -> role.getPermissions().stream())
-                .anyMatch(p -> p.getPermission().equals(permission));
+                .anyMatch(p -> ((Permission) p).getPermission().equals(permission));
     }
 
     @Override
