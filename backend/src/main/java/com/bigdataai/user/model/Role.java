@@ -18,10 +18,42 @@ public class Role {
     
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
+
+    /**
+     * 获取角色ID
+     * @return 角色ID
+     */
+    public Long getId() {
+        return id;
+    }
+
+    /**
+     * 设置角色ID
+     * @param id 角色ID
+     */
+    public void setId(Long id) {
+        this.id = id;
+    }
     
     private String name;
+
+    /**
+     * 获取角色名称
+     * @return 角色名称
+     */
+    public String getName() {
+        return name;
+    }
     
     private String description;
+
+    /**
+     * 获取角色描述
+     * @return 角色描述
+     */
+    public String getDescription() {
+        return description;
+    }
     
     /**
      * 角色权限关系需要通过中间表手动管理
@@ -29,4 +61,12 @@ public class Role {
      */
     @TableField(exist = false)
     private Set<Permission> permissions = new HashSet<>();
+
+    /**
+     * 设置角色权限集合
+     * @param permissions 角色权限集合
+     */
+    public void setPermissions(Set<Permission> permissions) {
+        this.permissions = permissions;
+    }
 }

@@ -20,6 +20,14 @@ public class User {
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
     
+    /**
+     * 获取用户ID
+     * @return 用户ID
+     */
+    public Long getId() {
+        return id;
+    }
+    
     private String username;
     
     private String password;
@@ -30,9 +38,33 @@ public class User {
     
     private String fullName;
     
+    /**
+     * 获取用户全名
+     * @return 用户全名
+     */
+    public String getFullName() {
+        return fullName;
+    }
+    
     private Date createTime;
     
+    /**
+     * 获取创建时间
+     * @return 创建时间
+     */
+    public Date getCreateTime() {
+        return createTime;
+    }
+    
     private Date lastLoginTime;
+    
+    /**
+     * 设置最后登录时间
+     * @param lastLoginTime 最后登录时间
+     */
+    public void setLastLoginTime(Date lastLoginTime) {
+        this.lastLoginTime = lastLoginTime;
+    }
     
     private Boolean enabled = true;
     
@@ -52,7 +84,7 @@ public class User {
     private Date lockTime;
     
     @TableField(exist = false)
-    private Set<String> roles = new HashSet<>();
+    private Set<String> roleNames = new HashSet<>(); // Renamed from roles to roleNames
     
     @TableField(exist = false)
     private Set<String> permissions = new HashSet<>();
@@ -64,6 +96,14 @@ public class User {
      */
     public String getPassword() {
         return password;
+    }
+
+    /**
+     * 设置密码
+     * @param password 密码
+     */
+    public void setPassword(String password) {
+        this.password = password;
     }
 
     /**
@@ -81,6 +121,22 @@ public class User {
     public void setLoginFailCount(Integer loginFailCount) {
         this.loginFailCount = loginFailCount;
     }
+
+    /**
+     * 设置账户是否锁定
+     * @param locked 是否锁定
+     */
+    public void setLocked(Boolean locked) {
+        this.locked = locked;
+    }
+
+    /**
+     * 获取账户锁定时间
+     * @return 账户锁定时间
+     */
+    public Date getLockedTime() {
+        return lockTime;
+    }
     
     /**
      * 用户角色关系需要通过中间表手动管理
@@ -88,6 +144,22 @@ public class User {
      */
     @TableField(exist = false)
     private Set<Role> roles = new HashSet<>();
+
+    /**
+     * 获取用户角色集合
+     * @return 用户角色集合
+     */
+    public Set<Role> getRoles() {
+        return roles;
+    }
+
+    /**
+     * 设置用户角色集合
+     * @param roles 用户角色集合
+     */
+    public void setRoles(Set<Role> roles) {
+        this.roles = roles;
+    }
     
     /**
      * 添加角色到用户
