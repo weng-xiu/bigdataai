@@ -3,6 +3,7 @@ package com.bigdataai.config;
 import com.bigdataai.security.CustomUserDetailsService;
 import com.bigdataai.security.JwtAuthenticationEntryPoint;
 import com.bigdataai.security.JwtRequestFilter;
+import com.bigdataai.security.JwtTokenUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -31,15 +32,16 @@ public class SecurityConfig {
     private final CustomUserDetailsService customUserDetailsService;
 
     @Autowired
-    private final PasswordEncoder passwordEncoder;
-
-    @Autowired
-    public SecurityConfig(JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint, CustomUserDetailsService customUserDetailsService, PasswordEncoder passwordEncoder) {
+    public SecurityConfig(JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint, CustomUserDetailsService customUserDetailsService) {
         this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
         this.customUserDetailsService = customUserDetailsService;
-        this.passwordEncoder = passwordEncoder;
     }
 
+    /**
+     * 配置 AuthenticationManager 使用自定义的 UserDetailsService 和密码编码器。
+     * @param auth AuthenticationManagerBuilder
+     * @throws Exception 配置异常
+     */
     @Autowired
     public void configureGlobal(AuthenticationManagerBuilder auth) throws Exception {
         // 配置AuthenticationManager使用自定义的UserDetailsService和密码编码器
@@ -56,13 +58,26 @@ public class SecurityConfig {
         return http.getSharedObject(AuthenticationManagerBuilder.class).build();
     }
 
+    /**
+     * 创建 JwtRequestFilter Bean，并注入依赖。
+     * @param jwtTokenUtil JWT 工具类
+     * @param customUserDetailsService 自定义用户详情服务
+     * @return JwtRequestFilter 实例
+     */
     @Bean
-    public JwtRequestFilter jwtRequestFilter() {
-        return new JwtRequestFilter();
+    public JwtRequestFilter jwtRequestFilter(JwtTokenUtil jwtTokenUtil, CustomUserDetailsService customUserDetailsService) {
+        return new JwtRequestFilter(customUserDetailsService, jwtTokenUtil);
     }
 
+    /**
+     * 配置安全过滤链。
+     * @param http HttpSecurity 配置器
+     * @param jwtRequestFilter JWT 请求过滤器
+     * @return SecurityFilterChain 实例
+     * @throws Exception 配置异常
+     */
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtRequestFilter jwtRequestFilter) throws Exception {
         http
             .csrf().disable()
             .authorizeRequests()
@@ -74,7 +89,7 @@ public class SecurityConfig {
             .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
 
         // 添加JWT过滤器
-        http.addFilterBefore(jwtRequestFilter(), UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.context.annotation.Lazy;
 
 /**
  * 用户服务实现类
@@ -52,7 +53,12 @@ public class UserServiceImpl implements UserService {
 
     private PasswordEncoder passwordEncoder;
 
+    /**
+     * 使用 @Lazy 注解延迟注入 PasswordEncoder，以解决循环依赖问题。
+     * @param passwordEncoder 密码编码器
+     */
     @Autowired
+    @Lazy
     public void setPasswordEncoder(PasswordEncoder passwordEncoder) {
         this.passwordEncoder = passwordEncoder;
     }
