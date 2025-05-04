@@ -3,7 +3,8 @@ package com.bigdataai.config;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SparkSession;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment; // 新增导入
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -13,20 +14,23 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class SparkConfig {
 
-    @Value("${spark.master}")
-    private String master;
+    @Autowired
+    private Environment env; // 注入 Environment
 
-    @Value("${spark.app.name}")
-    private String appName;
 
-    @Value("${spark.executor.memory}")
-    private String executorMemory;
 
-    @Value("${spark.driver.memory}")
-    private String driverMemory;
-
+    /**
+     * 创建 SparkConf Bean。
+     * @return SparkConf 实例
+     */
     @Bean
     public SparkConf sparkConf() {
+        // 从 Environment 获取配置
+        String master = env.getProperty("spark.master");
+        String appName = env.getProperty("spark.app-name"); // 注意属性名是 app-name
+        String executorMemory = env.getProperty("spark.executor.memory");
+        String driverMemory = env.getProperty("spark.driver.memory");
+
         return new SparkConf()
                 .setMaster(master)
                 .setAppName(appName)
