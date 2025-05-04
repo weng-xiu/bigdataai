@@ -26,16 +26,17 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Primary
 public class SecurityConfig {
 
-    @Autowired
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
-
-    @Autowired
     private final CustomUserDetailsService customUserDetailsService;
+    private final JwtTokenUtil jwtTokenUtil;
 
     @Autowired
-    public SecurityConfig(JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint, CustomUserDetailsService customUserDetailsService) {
+    public SecurityConfig(JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint, 
+                          CustomUserDetailsService customUserDetailsService,
+                          JwtTokenUtil jwtTokenUtil) {
         this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
         this.customUserDetailsService = customUserDetailsService;
+        this.jwtTokenUtil = jwtTokenUtil;
     }
 
     /**
@@ -43,7 +44,12 @@ public class SecurityConfig {
      * @param auth AuthenticationManagerBuilder
      * @throws Exception 配置异常
      */
-
+    @Autowired
+    public void configureAuthentication(AuthenticationManagerBuilder auth) throws Exception {
+        auth
+            .userDetailsService(customUserDetailsService)
+            .passwordEncoder(passwordEncoder());
+    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -61,36 +67,16 @@ public class SecurityConfig {
         return authenticationConfiguration.getAuthenticationManager();
     }
 
-    /**
-     * 创建 JwtRequestFilter Bean，并注入依赖。
-     * @param jwtTokenUtil JWT 工具类
-     * @param customUserDetailsService 自定义用户详情服务
-     * @return JwtRequestFilter 实例
-     */
-    @Bean
-    public JwtRequestFilter jwtRequestFilter(JwtTokenUtil jwtTokenUtil, CustomUserDetailsService customUserDetailsService) {
-        return new JwtRequestFilter(customUserDetailsService, jwtTokenUtil);
-    }
 
     /**
      * 配置安全过滤链。
      * @param http HttpSecurity 配置器
-     * @param jwtRequestFilter JWT 请求过滤器
-     * @return SecurityFilterChain 实例
-     * @throws Exception 配置异常
-     */
-    /**
-     * 配置安全过滤链。
-     * @param http HttpSecurity 配置器
-     * @param jwtRequestFilter JWT 请求过滤器
-     * @param authenticationManager 认证管理器
      * @return SecurityFilterChain 实例
      * @throws Exception 配置异常
      */
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtRequestFilter jwtRequestFilter, AuthenticationManager authenticationManager) throws Exception {
-        // 配置 AuthenticationManager
-        http.authenticationManager(authenticationManager);
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        // Spring Boot 会自动配置 AuthenticationManager，无需显式设置
         http
             .csrf().disable()
             .authorizeRequests()
@@ -101,8 +87,9 @@ public class SecurityConfig {
             .and()
             .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
 
-        // 添加JWT过滤器
-        http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
+        // 添加JWT过滤器，使用已注入的jwtTokenUtil
+        JwtRequestFilter jwtFilter = new JwtRequestFilter(customUserDetailsService, jwtTokenUtil);
+        http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
