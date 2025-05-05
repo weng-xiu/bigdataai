@@ -80,14 +80,14 @@ public class SecurityConfig {
         http
             .csrf().disable()
             .authorizeRequests()
-                .antMatchers("/auth/**").permitAll() // 允许所有用户访问认证相关接口
+                .antMatchers("/auth/**", "/api/auth/**").permitAll() // 允许所有用户访问认证相关接口
                 .anyRequest().authenticated()
             .and()
             .exceptionHandling().authenticationEntryPoint(jwtAuthenticationEntryPoint)
             .and()
             .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
 
-        // 添加JWT过滤器，使用已注入的jwtTokenUtil
+        // 添加JWT过滤器，在构造时传入依赖，避免循环依赖
         JwtRequestFilter jwtFilter = new JwtRequestFilter(customUserDetailsService, jwtTokenUtil);
         http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
