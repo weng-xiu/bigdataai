@@ -124,13 +124,47 @@
 
 ### 环境要求
 
-- JDK 1.8+
-- Node.js 14+
-- MySQL 8.0+
-- Maven 3.6+
-- Docker & Docker Compose (可选)
+#### 基础环境
+- JDK 1.8+（推荐使用Oracle JDK 1.8.0_291）
+- Node.js 14+（推荐使用Node.js 14.18.0或更高版本）
+- MySQL 8.0+（推荐使用MySQL 8.0.29）
+- Maven 3.6+（推荐使用Maven 3.6.3或更高版本）
+- Docker & Docker Compose（可选，用于容器化部署）
+
+#### 大数据环境（可选，根据需求安装）
+- Hadoop 3.3.2
+- Spark 3.2.1
+- HBase 2.4.11
+- Elasticsearch 7.17.3
+- MongoDB 4.6.1
+- Kafka 3.1.0
 
 ### 后端部署
+
+#### 数据库配置
+
+1. 创建MySQL数据库
+
+```bash
+# 登录MySQL
+mysql -u root -p
+
+# 创建数据库
+CREATE DATABASE bigdata_db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+# 授权（根据实际情况调整用户名和密码）
+GRANT ALL PRIVILEGES ON bigdata_db.* TO 'root'@'localhost' IDENTIFIED BY 'root';
+FLUSH PRIVILEGES;
+```
+
+2. 导入初始数据（可选）
+
+```bash
+# 导入SQL脚本（如果有）
+mysql -u root -p bigdata_db < /path/to/init.sql
+```
+
+#### 克隆与构建项目
 
 ```bash
 # 克隆项目
@@ -141,12 +175,51 @@ cd bigdataai/backend
 
 # 编译打包
 mvn clean package -DskipTests
+```
 
-# 运行应用
-java -jar target/bigdata-ai-backend-1.0.0.jar
+#### 配置应用参数
+
+在`src/main/resources/application.yml`或`application-dev.yml`中配置数据库连接：
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:13306/bigdata_db?useSSL=false&serverTimezone=UTC
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+```
+
+#### 启动应用
+
+```bash
+# 开发环境启动
+java -jar target/bigdata-ai-backend-1.0.0.jar --spring.profiles.active=dev
+
+# 生产环境启动（增加JVM参数）
+java -Xms512m -Xmx1024m -jar target/bigdata-ai-backend-1.0.0.jar --spring.profiles.active=prod
 ```
 
 ### 前端部署
+
+#### 安装Node.js和npm
+
+1. 从[Node.js官网](https://nodejs.org/)下载并安装Node.js 14+
+2. 验证安装
+
+```bash
+node -v  # 应显示v14.x.x或更高版本
+npm -v   # 应显示6.x.x或更高版本
+```
+
+#### 配置npm镜像（可选，推荐国内用户配置）
+
+```bash
+# 设置淘宝镜像
+npm config set registry https://registry.npmmirror.com
+```
+
+#### 安装与启动项目
 
 ```bash
 # 进入前端目录
@@ -155,18 +228,111 @@ cd bigdataai/frontend
 # 安装依赖
 npm install
 
-# 开发模式运行
+# 开发模式运行（热重载）
 npm run dev
+```
 
-# 生产环境构建
+#### 前端开发注意事项
+
+1. 开发服务器默认运行在 http://localhost:5173
+2. 修改API接口地址：在`src/api/config.js`或相关配置文件中设置后端API地址
+
+```javascript
+// 示例配置
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'http://production-api.example.com' 
+  : 'http://localhost:8080';
+
+export default API_BASE_URL;
+```
+
+#### 生产环境构建与部署
+
+```bash
+# 构建生产环境版本
 npm run build
+
+# 预览生产构建
+npm run preview
+
+# 部署到Web服务器
+# 将dist目录下的文件复制到Web服务器的静态资源目录
 ```
 
 ### Docker部署（可选）
 
+#### 安装Docker和Docker Compose
+
+1. 安装Docker：按照[Docker官方文档](https://docs.docker.com/get-docker/)安装
+2. 安装Docker Compose：按照[Docker Compose官方文档](https://docs.docker.com/compose/install/)安装
+
+#### 使用Docker Compose部署
+
+1. 在项目根目录创建或修改`docker-compose.yml`文件（如果不存在）
+
+```yaml
+version: '3'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: bigdata-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: bigdata_db
+    ports:
+      - "13306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  backend:
+    build: ./backend
+    container_name: bigdata-backend
+    restart: always
+    depends_on:
+      - mysql
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/bigdata_db?useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+
+  frontend:
+    build: ./frontend
+    container_name: bigdata-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql-data:
+```
+
+2. 启动服务
+
 ```bash
 # 在项目根目录执行
 docker-compose up -d
+
+# 查看容器状态
+docker-compose ps
+
+# 查看日志
+docker-compose logs -f
+```
+
+3. 停止服务
+
+```bash
+# 停止并移除容器
+docker-compose down
+
+# 停止并移除容器及卷（会删除数据）
+docker-compose down -v
 ```
 
 ## 项目截图
