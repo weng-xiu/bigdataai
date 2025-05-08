@@ -69,11 +69,13 @@ hbase:
 
 # Elasticsearch配置
 elasticsearch:
+  enabled: false
   host: localhost
   port: 9200
 
 # Spark配置
 spark:
+  enabled: false
   master: local[*]
   app-name: BigDataProcessing
   executor:

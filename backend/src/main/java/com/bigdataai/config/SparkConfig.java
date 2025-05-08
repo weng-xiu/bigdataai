@@ -4,20 +4,21 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SparkSession;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.env.Environment; // 新增导入
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.env.Environment;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
  * Spark配置类
+ * 只有当spark.enabled=true时才会初始化Spark相关组件
  */
 @Configuration
+@ConditionalOnProperty(name = "spark.enabled", havingValue = "true", matchIfMissing = false)
 public class SparkConfig {
 
     @Autowired
-    private Environment env; // 注入 Environment
-
-
+    private Environment env;
 
     /**
      * 创建 SparkConf Bean。
@@ -36,8 +37,8 @@ public class SparkConfig {
                 .setAppName(appName)
                 .set("spark.executor.memory", executorMemory)
                 .set("spark.driver.memory", driverMemory)
-                .set("spark.driver.extraLibraryPath", System.getenv("HADOOP_HOME") + "/bin")
-                .set("spark.executor.extraLibraryPath", System.getenv("HADOOP_HOME") + "/bin");
+                .set("spark.driver.extraLibraryPath", System.getenv("HADOOP_HOME") != null ? System.getenv("HADOOP_HOME") + "/bin" : "")
+                .set("spark.executor.extraLibraryPath", System.getenv("HADOOP_HOME") != null ? System.getenv("HADOOP_HOME") + "/bin" : "");
     }
 
     @Bean
