@@ -24,14 +24,20 @@ public class SparkConfig {
      * 创建 SparkConf Bean。
      * @return SparkConf 实例
      */
+    /**
+     * 创建 SparkConf Bean。
+     * 从配置文件中读取Spark配置，并提供默认值以防配置缺失
+     * @return SparkConf 实例
+     */
     @Bean
     public SparkConf sparkConf() {
-        // 从 Environment 获取配置
-        String master = env.getProperty("spark.master");
-        String appName = env.getProperty("spark.app-name"); // 注意属性名是 app-name
-        String executorMemory = env.getProperty("spark.executor.memory");
-        String driverMemory = env.getProperty("spark.driver.memory");
+        // 从 Environment 获取配置，并提供默认值
+        String master = env.getProperty("spark.master", "local[*]");
+        String appName = env.getProperty("spark.app-name", "BigDataProcessing"); // 注意属性名是 app-name
+        String executorMemory = env.getProperty("spark.executor.memory", "1g");
+        String driverMemory = env.getProperty("spark.driver.memory", "1g");
 
+        // 创建并返回SparkConf实例
         return new SparkConf()
                 .setMaster(master)
                 .setAppName(appName)
@@ -39,6 +45,13 @@ public class SparkConfig {
                 .set("spark.driver.memory", driverMemory);
     }
 
+    /**
+     * 创建 SparkSession Bean。
+     * 使用配置好的SparkConf创建SparkSession实例
+     * 
+     * @param sparkConf 已配置的SparkConf实例
+     * @return SparkSession 实例
+     */
     @Bean
     public SparkSession sparkSession(SparkConf sparkConf) {
         return SparkSession.builder()
@@ -46,6 +59,13 @@ public class SparkConfig {
                 .getOrCreate();
     }
 
+    /**
+     * 创建 JavaSparkContext Bean。
+     * 使用配置好的SparkConf创建JavaSparkContext实例
+     * 
+     * @param sparkConf 已配置的SparkConf实例
+     * @return JavaSparkContext 实例
+     */
     @Bean
     public JavaSparkContext javaSparkContext(SparkConf sparkConf) {
         return new JavaSparkContext(sparkConf);
