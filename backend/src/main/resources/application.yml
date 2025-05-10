@@ -75,7 +75,7 @@ elasticsearch:
 
 # Spark配置
 spark:
-  enabled: false
+  enabled: true
   master: local[*]
   app-name: BigDataProcessing
   executor:
