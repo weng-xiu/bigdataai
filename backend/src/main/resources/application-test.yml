@@ -1,0 +1,25 @@
+# 测试环境配置，禁用数据库连接
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+  main:
+    allow-bean-definition-overriding: true
+    web-application-type: none
+
+# 禁用Eureka客户端
+eureka:
+  client:
+    enabled: false
+
+# 禁用其他组件
+kafka:
+  enabled: false
+
+elasticsearch:
+  enabled: false
+
+spark:
+  enabled: false
