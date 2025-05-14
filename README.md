@@ -14,7 +14,18 @@
 
 ## 系统架构
 
-![系统架构图](系统架构图URL)
+```mermaid
+flowchart TD
+    A[数据接入层] --> B[数据存储层]
+    B --> C[数据处理层]
+    C --> D[服务层]
+    D --> E[前端展示层]
+    A -->|Kafka/Flume/Logstash| B
+    B -->|HDFS/HBase/ES| C
+    C -->|Spark Core/SQL/Streaming| D
+    D -->|Spring Boot/Cloud| E
+    E -->|Vue/ElementPlus/Echarts| 用户
+```
 
 系统采用分层架构设计，各层职责明确，相互协作：
 
@@ -65,28 +76,28 @@
 ## 技术栈
 
 ### 前端
-- **框架**：Vue 3 + Vue Router + Vuex
-- **UI库**：ElementPlus组件库
-- **可视化**：Echarts数据可视化
-- **HTTP客户端**：Axios
-- **构建工具**：Vite
-- **CSS预处理器**：Sass
-- **状态管理**：Vuex 4
+- **框架**：Vue 3.3.4 + Vue Router 4.2.4 + Vuex 4.1.0
+- **UI库**：ElementPlus 2.3.12组件库
+- **可视化**：Echarts 5.4.3数据可视化
+- **HTTP客户端**：Axios 1.5.0
+- **构建工具**：Vite 4.4.9
+- **CSS预处理器**：Sass 1.66.1
+- **状态管理**：Vuex 4.1.0
 - **响应式设计**：适配多种设备屏幕
 
 ### 后端
-- **基础框架**：Java 8 + Spring Boot 2.7 + Spring Cloud 2021
+- **基础框架**：Java 8 + Spring Boot 2.7.0 + Spring Cloud 2021.0.3
 - **API设计**：RESTful API
-- **ORM框架**：MyBatis + MyBatis-Plus
+- **ORM框架**：MyBatis + MyBatis-Plus 3.5.2
 - **数据库**：
-  - **关系型**：MySQL 8.0
-  - **NoSQL**：MongoDB 4.6
-  - **列式存储**：HBase 2.4
-  - **搜索引擎**：Elasticsearch 7.17
-- **消息队列**：Kafka 3.1
+  - **关系型**：MySQL 8.0.29
+  - **NoSQL**：MongoDB 4.6.1
+  - **列式存储**：HBase 2.4.11
+  - **搜索引擎**：Elasticsearch 7.17.3
+- **消息队列**：Kafka 3.1.0
 - **大数据处理**：
-  - **分布式计算**：Spark 3.2
-  - **分布式存储**：Hadoop 3.3
+  - **分布式计算**：Spark 3.2.1
+  - **分布式存储**：Hadoop 3.3.2
 
 ## 功能模块
 
