@@ -16,18 +16,26 @@
 
 ```mermaid
 flowchart TD
-    A[数据接入层] --> B[数据存储层]
-    B --> C[数据处理层]
-    C --> D[服务层]
-    D --> E[前端展示层]
+    subgraph 分层架构
+        A[数据接入层] -->|实时/批量数据| B[数据存储层]
+        B -->|原始/结构化/索引数据| C[数据处理层]
+        C -->|分析/计算结果| D[服务层]
+        D -->|API服务| E[前端展示层]
+    end
     A -->|Kafka/Flume/Logstash| B
-    B -->|HDFS/HBase/ES| C
+    B -->|HDFS/HBase/Elasticsearch| C
     C -->|Spark Core/SQL/Streaming| D
-    D -->|Spring Boot/Cloud| E
-    E -->|Vue/ElementPlus/Echarts| 用户
+    D -->|Spring Boot/Cloud微服务| E
+    E -->|Vue+ElementPlus+ECharts| 终端用户
 ```
 
-系统采用分层架构设计，各层职责明确，相互协作：
+系统采用分层架构设计，各层通过标准化接口实现松耦合协作，核心交互流程如下：
+
+- 数据接入层通过Kafka/Flume/Logstash等组件，将实时流数据（如业务日志）或批量数据（如CSV文件）清洗转换后，以结构化/半结构化格式传递至数据存储层
+- 数据存储层根据数据类型选择HDFS（原始大文件）、HBase（高频读写结构化数据）或Elasticsearch（全文检索数据）存储，并通过统一元数据接口向处理层暴露访问能力
+- 数据处理层基于Spark Core/SQL/Streaming引擎，从存储层拉取数据完成批处理（T+1报表）、流处理（实时告警）或机器学习（用户画像），结果输出至服务层
+- 服务层通过Spring Boot/Cloud微服务封装分析结果，提供RESTful API供前端调用，并集成服务治理（注册发现/熔断限流）保障高可用
+- 前端展示层通过Vue+ElementPlus构建交互界面，调用服务层API获取数据，使用ECharts实现动态图表可视化，最终呈现给终端用户
 
 ### 数据接入层
 
