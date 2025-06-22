@@ -3,10 +3,12 @@ package com.bigdataai.monitoring.service;
 import java.util.List;
 import java.util.Map;
 
+import com.bigdataai.common.exception.BusinessException;
 import com.bigdataai.monitoring.model.MetricData;
 
 /**
  * 监控服务接口
+ * 提供系统监控相关的服务方法
  */
 public interface MonitoringService {
     /**
