@@ -22,7 +22,8 @@ import org.springframework.cloud.netflix.eureka.EurekaClientAutoConfiguration;
 public class BigDataApplication {
     public static void main(String[] args) {
         SpringApplication application = new SpringApplication(BigDataApplication.class);
-        application.setWebApplicationType(WebApplicationType.NONE); // 设置为非Web应用
+        // 设置为Web应用，启动嵌入式Tomcat服务器
+        application.setWebApplicationType(WebApplicationType.SERVLET);
         application.run(args);
     }
 }
