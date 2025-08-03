@@ -54,14 +54,5 @@ public class MyBatisConfig {
         return new SqlSessionTemplate(sqlSessionFactory);
     }
 
-    /**
-     * 创建事务管理器
-     * 
-     * @param dataSource 数据源
-     * @return 事务管理器实例
-     */
-    @Bean
-    public PlatformTransactionManager transactionManager(DataSource dataSource) {
-        return new DataSourceTransactionManager(dataSource);
-    }
+
 }

@@ -42,10 +42,10 @@ public class DataProcessingServiceImpl implements DataProcessingService {
 
     private static final Logger logger = LoggerFactory.getLogger(DataProcessingServiceImpl.class);
 
-    @Autowired
+    @Autowired(required = false)
     private SparkSession sparkSession;
 
-    @Autowired
+    @Autowired(required = false)
     private JavaSparkContext javaSparkContext;
 
     @Autowired
@@ -56,6 +56,11 @@ public class DataProcessingServiceImpl implements DataProcessingService {
 
     @Override
     public Map<String, Object> cleanData(Long dataSourceId, String tableName, Map<String, Object> rules) {
+        // 检查Spark是否可用
+        if (sparkSession == null) {
+            return ApiResponse.error("Spark服务未启用，无法执行数据清洗");
+        }
+        
         try {
             // 获取数据源
             DataSource dataSource = dataSourceService.getDataSource(dataSourceId);
@@ -88,6 +93,11 @@ public class DataProcessingServiceImpl implements DataProcessingService {
 
     @Override
     public Map<String, Object> transformData(Long dataSourceId, String tableName, Map<String, Object> transformations) {
+        // 检查Spark是否可用
+        if (sparkSession == null) {
+            return ApiResponse.error("Spark服务未启用，无法执行数据转换");
+        }
+        
         try {
             // 获取数据源
             DataSource dataSource = dataSourceService.getDataSource(dataSourceId);
@@ -120,6 +130,11 @@ public class DataProcessingServiceImpl implements DataProcessingService {
 
     @Override
     public Map<String, Object> aggregateData(Long dataSourceId, String tableName, Map<String, Object> aggregations) {
+        // 检查Spark是否可用
+        if (sparkSession == null) {
+            return ApiResponse.error("Spark服务未启用，无法执行数据聚合");
+        }
+        
         try {
             // 获取数据源
             DataSource dataSource = dataSourceService.getDataSource(dataSourceId);

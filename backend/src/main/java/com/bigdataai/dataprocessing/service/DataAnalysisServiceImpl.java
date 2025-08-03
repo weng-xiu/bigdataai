@@ -31,7 +31,7 @@ import java.util.Map;
 @Service
 public class DataAnalysisServiceImpl implements DataAnalysisService {
 
-    @Autowired
+    @Autowired(required = false)
     private SparkSession sparkSession;
 
     @Autowired
@@ -40,6 +40,13 @@ public class DataAnalysisServiceImpl implements DataAnalysisService {
     @Override
     public Map<String, Object> executeSqlQuery(Long dataSourceId, String sql) {
         Map<String, Object> result = new HashMap<>();
+
+        // 检查Spark是否可用
+        if (sparkSession == null) {
+            result.put("success", false);
+            result.put("message", "Spark服务未启用，无法执行SQL查询");
+            return result;
+        }
 
         try {
             // 获取数据源

@@ -16,7 +16,6 @@ import org.springframework.cloud.netflix.eureka.EurekaClientAutoConfiguration;
 @SpringBootApplication(exclude = {
     MongoDataAutoConfiguration.class,
     RedisAutoConfiguration.class,
-    SecurityAutoConfiguration.class,
     EurekaClientAutoConfiguration.class
 })
 public class BigDataApplication {
