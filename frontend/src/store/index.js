@@ -1,6 +1,7 @@
 import { createStore } from 'vuex'
 import user from './modules/user'
 import app from './modules/app'
+import request from '@/utils/request'
 
 export default createStore({
   modules: {
@@ -23,8 +24,6 @@ export default createStore({
       state.systemInfo = info
     }
   },
-import request from '@/utils/request' // 导入封装的axios实例
-
   // 异步操作
   actions: {
     // 获取系统信息
